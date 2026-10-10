@@ -1,16 +1,44 @@
 # Popcorn
-An Adobe Flash clone made in Rust.
 
-## macOS application
+Popcorn is a cross-platform 2D animation editor inspired by Adobe Flash/Animate, built with Rust and GPUI Kit.
 
-`cargo run` uses `popcorn.png` as its Dock icon, embedded in the executable.
+The goal is to provide a fast, extensible, classic timeline workflow without scripting or advanced publishing features for now.
 
-To create a local app with the same icon in Finder and the Dock:
+## Current status
 
-```sh
-bash scripts/bundle-macos.sh debug
-open target/bundle/Popcorn.app
+- Canvas with selection, move, hand, zoom, rectangle, ellipse, pencil, and text tools.
+- Timeline with layers, frames, keyframes, blank frames, playback, and looping.
+- Selection controls for scaling and rotating objects.
+- Image import through drag and drop, as well as copy and paste.
+- Inspector with properties, object library, and alignment tools.
+- Fill colors with quick swatches and a custom color picker.
+- Context menus, undo/redo, and `.pop` documents.
+- Dark interface with native macOS integration.
+
+## Running
+
+You need Rust and Cargo installed:
+
+```bash
+cargo run
 ```
 
-Omit `debug` to build in release mode. The bundle is locally ad-hoc signed, not
-notarized for distribution. Its `.icns` icon is generated from `popcorn.png`.
+To check the project:
+
+```bash
+cargo test
+```
+
+## Main shortcuts
+
+- `Enter`: play or pause the animation.
+- `F5`: extend the timeline.
+- `F6`: insert a keyframe.
+- `F7`: insert a blank frame.
+- `Shift`: constrain shapes and transformations.
+- `Cmd/Ctrl + Z`: undo.
+- `Cmd/Ctrl + Shift + Z`: redo.
+
+## Structure
+
+The logic is split by responsibility inside `src/editor/`: canvas and tools, timeline, commands, panels, and UI. The document format and animation models are designed to support more tools and publishing capabilities over time.

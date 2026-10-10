@@ -44,7 +44,7 @@ fn main() {
         let window_size = size(px(1440.), px(900.));
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(window_size, cx)),
-            window_min_size: Some(size(px(1120.), px(680.))),
+            window_min_size: Some(size(px(1100.), px(680.))),
             ..window_chrome_options()
         };
 
