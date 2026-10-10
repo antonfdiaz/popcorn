@@ -366,6 +366,14 @@ impl Editor {
                             ),
                         )
                         .child(
+                            self.property_row(
+                                "Rotation",
+                                selection
+                                    .map(|o| format!("{:.1}°", o.rotation.to_degrees()))
+                                    .unwrap_or_else(|| "—".into()),
+                            ),
+                        )
+                        .child(
                             self.command_button(
                                 "edit-object",
                                 IconName::Pencil,

@@ -64,6 +64,7 @@ mod tests {
             layer: 0,
             keyframe: 1,
             fill: theme::ACCENT,
+            rotation: 0.,
         });
         editor
     }
@@ -198,6 +199,7 @@ impl Snapshot {
                 o.layer >= self.layers.len()
                     || !self.layers[o.layer].keyframes.contains(&o.keyframe)
                     || [o.x, o.y, o.w, o.h].iter().any(|v| !v.is_finite())
+                    || !o.rotation.is_finite()
                     || o.w <= 0.
                     || o.h <= 0.
             })
@@ -309,6 +311,7 @@ impl Editor {
                         layer: self.selected_layer,
                         keyframe: self.active_keyframe(self.selected_layer),
                         fill: self.fill,
+                        rotation: 0.,
                     });
                 }
             }

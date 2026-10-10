@@ -60,6 +60,7 @@ impl Modal {
             ("Y", o.y.to_string()),
             ("Width", o.w.to_string()),
             ("Height", o.h.to_string()),
+            ("Rotation (degrees)", o.rotation.to_degrees().to_string()),
             ("Fill (#RRGGBB)", format!("{:06x}", o.fill)),
         ];
         if let workspace::Kind::Text(text) = &o.kind {
@@ -96,7 +97,7 @@ impl Editor {
             .child(v_flex().w(px(400.)).p_5().gap_3().rounded_lg().shadow_lg().bg(theme::color(theme::SURFACE_ALT)).border_1().border_color(theme::color(theme::BORDER))
                 .child(div().font_weight(FontWeight::BOLD).child(modal.title))
                 .when(matches!(modal.form,Form::New),|d|d.child(div().text_sm().child("Start with an empty stage? Save your current document first if you want to keep it.")))
-                .when(matches!(modal.form,Form::Help),|d|d.child(div().text_sm().child("Drag to draw or move. Shift constrains shapes. Transform resizes. Hand pans; Zoom clicks in (Alt: out). Right-click objects, layers or frames for editing commands. F6: keyframe · F7: blank keyframe · F5: extend · Enter: play. Save/Open use the .pop document format. Library stores reusable copies, not linked symbols.")))
+                .when(matches!(modal.form,Form::Help),|d|d.child(div().text_sm().child("Drag to draw or move. Select an object to show its controls; drag the corner handles to scale and the top handle to rotate. Shift constrains shapes, keeps transform proportions and snaps rotation. Hand pans; Zoom clicks in (Alt: out). Right-click objects, layers or frames for editing commands. F6: keyframe · F7: blank keyframe · F5: extend · Enter: play. Save/Open use the .pop document format. Library stores reusable copies, not linked symbols.")))
                 .children(modal.fields.iter().map(|(label,state)|v_flex().gap_1().child(div().text_xs().text_color(theme::color(theme::TEXT_MUTED)).child(*label)).child(Input::new(state).small())))
                 .child(div().text_xs().text_color(theme::color(theme::ACCENT)).child(modal.error.clone()))
                 .child(h_flex().gap_2().justify_end()
@@ -136,7 +137,8 @@ impl Editor {
                         number(2, 1., 100000.)?,
                         number(3, 1., 100000.)?,
                     ];
-                    let hex = values[4].trim().trim_start_matches('#');
+                    let rotation = number(4, -36000., 36000.)?.to_radians();
+                    let hex = values[5].trim().trim_start_matches('#');
                     if hex.len() != 6 {
                         return Err("Use a six-digit hex color".into());
                     }
@@ -148,9 +150,10 @@ impl Editor {
                         o.y = dims[1];
                         o.w = dims[2];
                         o.h = dims[3];
+                        o.rotation = rotation;
                         o.fill = color;
                         if let workspace::Kind::Text(text) = &mut o.kind {
-                            *text = values[5].clone();
+                            *text = values[6].clone();
                         }
                     }
                 }
