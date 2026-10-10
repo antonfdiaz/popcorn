@@ -164,14 +164,9 @@ impl Default for Editor {
             is_playing: false,
             selected_tool: Tool::Select,
             inspector_tab: InspectorTab::Properties,
-            selected_layer: 1,
+            selected_layer: 0,
             zoom: 100,
-            layers: vec![
-                LayerState::new("Hero", theme::ACCENT),
-                LayerState::new("Highlight", theme::BLUE),
-                LayerState::new("Background", theme::GREEN),
-                LayerState::new("Guide", 0xa78bfa),
-            ],
+            layers: vec![LayerState::new("Layer 1", theme::ACCENT)],
             playback_task: None,
         }
     }
@@ -454,7 +449,6 @@ impl Editor {
                     .flex_shrink_0()
                     .children((1..=self.frame_count).map(|frame| {
                         let current = frame == self.current_frame;
-                        let keyframe = layer.keyframes.contains(&frame);
                         let active = layer
                             .keyframes
                             .iter()
@@ -467,6 +461,7 @@ impl Editor {
                             .objects
                             .iter()
                             .any(|o| o.layer == layer_index && o.keyframe == active);
+                        let keyframe = layer.keyframes.contains(&frame) && filled;
                         div()
                             .relative()
                             .w(px(FRAME_WIDTH))

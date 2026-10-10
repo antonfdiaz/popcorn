@@ -52,9 +52,34 @@ pub(super) enum Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn seeded_editor() -> Editor {
+        let mut editor = Editor::default();
+        editor.drawing.objects.push(Object {
+            kind: workspace::Kind::Rectangle,
+            x: 300.,
+            y: 130.,
+            w: 140.,
+            h: 170.,
+            layer: 0,
+            keyframe: 1,
+            fill: theme::ACCENT,
+        });
+        editor
+    }
+
+    #[::core::prelude::v1::test]
+    fn new_editor_starts_with_one_empty_layer() {
+        let editor = Editor::default();
+        assert_eq!(editor.layers.len(), 1);
+        assert_eq!(editor.layers[0].name, "Layer 1");
+        assert_eq!(editor.layers[0].keyframes, vec![1]);
+        assert!(editor.drawing.objects.is_empty());
+    }
+
     #[::core::prelude::v1::test]
     fn keyframes_hold_independent_copies_and_blank_frames_hide_content() {
-        let mut e = Editor::default();
+        let mut e = seeded_editor();
         e.selected_layer = 0;
         e.current_frame = 8;
         e.apply_edit(Command::Keyframe);
@@ -72,7 +97,7 @@ mod tests {
     }
     #[::core::prelude::v1::test]
     fn undo_redo_restores_objects_and_invalidates_redo_after_new_edit() {
-        let mut e = Editor::default();
+        let mut e = seeded_editor();
         e.drawing.selected = Some(0);
         e.selected_layer = 0;
         e.apply_edit(Command::Duplicate);
@@ -87,23 +112,25 @@ mod tests {
     }
     #[::core::prelude::v1::test]
     fn reorder_and_delete_layers_remap_objects_and_keep_one_layer() {
-        let mut e = Editor::default();
+        let mut e = seeded_editor();
+        e.apply_edit(Command::AddLayer);
+        e.selected_layer = 0;
         e.selected_layer = 0;
         e.apply_edit(Command::LayerDown);
         assert_eq!(e.drawing.objects[0].layer, 1);
-        assert_eq!(e.layers[1].name, "Hero");
+        assert_eq!(e.layers[1].name, "Layer 1");
         e.selected_layer = 0;
         e.apply_edit(Command::DeleteLayer);
         assert_eq!(e.drawing.objects[0].layer, 0);
         e.apply_edit(Command::DeleteLayer);
-        assert!(e.drawing.objects.is_empty());
+        assert_eq!(e.drawing.objects.len(), 1);
         e.apply_edit(Command::DeleteLayer);
         e.apply_edit(Command::DeleteLayer);
         assert_eq!(e.layers.len(), 1);
     }
     #[::core::prelude::v1::test]
     fn locked_layers_reject_keyframes_and_paste() {
-        let mut e = Editor::default();
+        let mut e = seeded_editor();
         e.selected_layer = 0;
         e.drawing.selected = Some(0);
         e.apply_edit(Command::Copy);
@@ -116,7 +143,7 @@ mod tests {
     }
     #[::core::prelude::v1::test]
     fn document_round_trip_preserves_timeline_and_rejects_invalid_references() {
-        let mut e = Editor::default();
+        let mut e = seeded_editor();
         e.selected_layer = 0;
         e.current_frame = 10;
         e.apply_edit(Command::Keyframe);

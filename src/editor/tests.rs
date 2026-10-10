@@ -42,21 +42,21 @@ fn visible_buttons_edit_document_and_native_shortcuts_work(cx: &mut TestAppConte
         }
         assert!(window.find("drawing-viewport").bounds().size.width > px(500.));
         window.click("add-layer", cx);
-        assert_eq!(editor.read(cx).layers.len(), 5);
+        assert_eq!(editor.read(cx).layers.len(), 2);
         window.click("doc-undo", cx);
-        assert_eq!(editor.read(cx).layers.len(), 4);
+        assert_eq!(editor.read(cx).layers.len(), 1);
         window.click("doc-redo", cx);
-        assert_eq!(editor.read(cx).layers.len(), 5);
+        assert_eq!(editor.read(cx).layers.len(), 2);
         window.scroll(
             "timeline-vertical",
             gpui_kit::ScrollDelta::Pixels(point(px(0.), px(-96.))),
             cx,
         );
-        window.click("frame-4-8", cx);
-        assert_eq!(editor.read(cx).selected_layer, 4);
+        window.click("frame-1-8", cx);
+        assert_eq!(editor.read(cx).selected_layer, 1);
         assert_eq!(editor.read(cx).current_frame, 8);
         window.click("add-blank", cx);
-        assert_eq!(editor.read(cx).layers[4].keyframes, vec![1, 8]);
+        assert_eq!(editor.read(cx).layers[1].keyframes, vec![1, 8]);
         window.press("f6", cx);
         window.click("extend-frames", cx);
         assert_eq!(editor.read(cx).frame_count, 44);
@@ -99,13 +99,13 @@ fn real_pointer_drag_draws_and_context_menu_keeps_frame_target(cx: &mut TestAppC
             cx,
         );
         let view = editor.read(cx);
-        assert_eq!(view.drawing.objects.len(), 2);
+        assert_eq!(view.drawing.objects.len(), 1);
         assert!(matches!(
-            view.drawing.objects[1].kind,
+            view.drawing.objects[0].kind,
             super::workspace::Kind::Ellipse
         ));
         assert_eq!(
-            [view.drawing.objects[1].w, view.drawing.objects[1].h],
+            [view.drawing.objects[0].w, view.drawing.objects[0].h],
             [140., 100.]
         );
         window.right_click("frame-0-5", cx);

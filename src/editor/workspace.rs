@@ -39,16 +39,7 @@ pub(super) struct Drawing {
 impl Default for Drawing {
     fn default() -> Self {
         Self {
-            objects: vec![Object {
-                kind: Kind::Rectangle,
-                x: 300.,
-                y: 130.,
-                w: 140.,
-                h: 170.,
-                layer: 0,
-                keyframe: 1,
-                fill: theme::ACCENT,
-            }],
+            objects: Vec::new(),
             selected: None,
             drag: None,
             pan: [0., 0.],
@@ -481,7 +472,7 @@ mod tests {
         editor.layers[0].locked = true;
         editor.selected_tool = Tool::Rectangle;
         editor.pointer_down(point(px(320.), px(150.)), false);
-        assert_eq!(editor.drawing.objects.len(), 1);
+        assert!(editor.drawing.objects.is_empty());
         editor.selected_tool = Tool::Select;
         editor.pointer_down(point(px(320.), px(150.)), false);
         assert!(editor.drawing.selected.is_none());
@@ -490,6 +481,16 @@ mod tests {
     #[::core::prelude::v1::test]
     fn moving_at_double_zoom_uses_document_units() {
         let mut editor = editor();
+        editor.drawing.objects.push(Object {
+            kind: Kind::Rectangle,
+            x: 300.,
+            y: 130.,
+            w: 140.,
+            h: 170.,
+            layer: 0,
+            keyframe: 1,
+            fill: theme::ACCENT,
+        });
         editor.zoom = 200;
         editor.pointer_down(point(px(220.), px(75.)), false);
         editor.pointer_move(point(px(260.), px(95.)), false);
