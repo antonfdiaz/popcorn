@@ -290,6 +290,40 @@ impl Editor {
         if self.modal.is_some() {
             return;
         }
+        if matches!(command, Command::Paste) && self.clipboard.is_none() {
+            if let Some(item) = cx.read_from_clipboard() {
+                if let Some(ClipboardEntry::Image(image)) = item
+                    .entries()
+                    .iter()
+                    .find(|entry| matches!(entry, ClipboardEntry::Image(_)))
+                {
+                    self.clipboard = Some(Object {
+                        kind: workspace::Kind::Image {
+                            bytes: image.bytes.clone(),
+                            format: image.format.mime_type().into(),
+                        },
+                        x: 100.,
+                        y: 100.,
+                        w: 320.,
+                        h: 200.,
+                        layer: self.selected_layer,
+                        keyframe: self.active_keyframe(self.selected_layer),
+                        fill: self.fill,
+                    });
+                }
+            }
+        }
+        let system_image = if matches!(command, Command::Copy) {
+            self.editable_selection()
+                .and_then(|index| match &self.drawing.objects[index].kind {
+                    workspace::Kind::Image { bytes, format } => {
+                        Some((bytes.clone(), format.clone()))
+                    }
+                    _ => None,
+                })
+        } else {
+            None
+        };
         match command {
             Command::New => self.modal = Some(panels::Modal::confirm_new(window, cx)),
             Command::Open => self.open_document(cx),
@@ -312,6 +346,11 @@ impl Editor {
             }
             Command::Help => self.modal = Some(panels::Modal::help()),
             _ => self.apply_edit(command),
+        }
+        if let Some((bytes, format)) = system_image {
+            if let Some(format) = ImageFormat::from_mime_type(&format) {
+                cx.write_to_clipboard(ClipboardItem::new_image(&Image::from_bytes(format, bytes)));
+            }
         }
         self.status = format!("{command:?}");
         cx.notify();

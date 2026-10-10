@@ -1,4 +1,5 @@
 use super::*;
+use std::sync::Arc;
 use std::{cell::Cell, rc::Rc};
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -7,6 +8,7 @@ pub(super) enum Kind {
     Ellipse,
     Pencil(Vec<[f32; 2]>),
     Text(String),
+    Image { bytes: Vec<u8>, format: String },
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -66,6 +68,17 @@ impl Editor {
                 .text_color(theme::color(o.fill))
                 .text_size(px(24. * scale))
                 .child(text.clone()),
+            Kind::Image { bytes, format } => {
+                let image_format = ImageFormat::from_mime_type(format).unwrap_or(ImageFormat::Png);
+                base.child(
+                    img(ImageSource::Image(Arc::new(Image::from_bytes(
+                        image_format,
+                        bytes.clone(),
+                    ))))
+                    .size_full()
+                    .object_fit(ObjectFit::Contain),
+                )
+            }
             Kind::Pencil(points) => {
                 let points = points.clone();
                 let fill = o.fill;
@@ -247,6 +260,15 @@ impl Editor {
                             cx.notify();
                         }),
                     )
+                    .can_drop(|value, _, _| value.downcast_ref::<ExternalPaths>().is_some())
+                    .drag_over::<ExternalPaths>(|style, _, _, _| {
+                        style.border_2().border_color(theme::color(theme::ACCENT))
+                    })
+                    .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
+                        let position = this.document_point(window.mouse_position());
+                        this.import_external_images(paths, position);
+                        cx.notify();
+                    }))
                     .test_support()
                     .context_menu({
                         let weak = cx.weak_entity();
@@ -295,6 +317,75 @@ impl Editor {
             (f32::from(p.x - b.origin.x) - o[0]) / s,
             (f32::from(p.y - b.origin.y) - o[1]) / s,
         ]
+    }
+
+    fn import_external_images(&mut self, paths: &ExternalPaths, position: [f32; 2]) {
+        if self.layers[self.selected_layer].locked || !self.layers[self.selected_layer].visible {
+            self.status = "The selected layer is locked or hidden".into();
+            return;
+        }
+
+        let format_for = |path: &std::path::Path| match path
+            .extension()?
+            .to_string_lossy()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "png" => Some("image/png"),
+            "jpg" | "jpeg" => Some("image/jpeg"),
+            "webp" => Some("image/webp"),
+            "gif" => Some("image/gif"),
+            "svg" => Some("image/svg+xml"),
+            "bmp" => Some("image/bmp"),
+            "tif" | "tiff" => Some("image/tiff"),
+            "ico" => Some("image/ico"),
+            _ => None,
+        };
+        let mut imported = 0;
+        for (offset, path) in paths.paths().iter().enumerate() {
+            let Some(format) = format_for(path) else {
+                continue;
+            };
+            let Ok(bytes) = std::fs::read(path) else {
+                continue;
+            };
+            if bytes.is_empty() {
+                continue;
+            }
+            if imported == 0 {
+                self.checkpoint();
+            }
+            let w = 320.;
+            let h = 200.;
+            let x = (position[0] - w / 2. + offset as f32 * 20.)
+                .clamp(0., (self.stage_size[0] - w).max(0.));
+            let y = (position[1] - h / 2. + offset as f32 * 20.)
+                .clamp(0., (self.stage_size[1] - h).max(0.));
+            let index = self.drawing.objects.len();
+            self.drawing.objects.push(Object {
+                kind: Kind::Image {
+                    bytes,
+                    format: format.into(),
+                },
+                x,
+                y,
+                w,
+                h,
+                layer: self.selected_layer,
+                keyframe: self.active_keyframe(self.selected_layer),
+                fill: self.fill,
+            });
+            self.drawing.selected = Some(index);
+            imported += 1;
+        }
+        self.status = if imported == 0 {
+            "Drop a supported image (PNG, JPEG, WebP, GIF, SVG, BMP, TIFF or ICO)".into()
+        } else {
+            format!(
+                "Imported {imported} image{}",
+                if imported == 1 { "" } else { "s" }
+            )
+        };
     }
 
     fn pointer_down(&mut self, pos: Point<Pixels>, alt: bool) {
@@ -496,5 +587,20 @@ mod tests {
         editor.pointer_move(point(px(260.), px(95.)), false);
         let object = &editor.drawing.objects[0];
         assert_eq!([object.x, object.y], [320., 140.]);
+    }
+
+    #[::core::prelude::v1::test]
+    fn dropped_image_becomes_selectable_and_copyable_object() {
+        let mut editor = editor();
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("popcorn.png");
+        let paths = ExternalPaths([path].into_iter().collect());
+        editor.import_external_images(&paths, [400., 225.]);
+        assert_eq!(editor.drawing.objects.len(), 1);
+        assert!(matches!(editor.drawing.objects[0].kind, Kind::Image { .. }));
+        assert_eq!(editor.drawing.selected, Some(0));
+        editor.apply_edit(Command::Copy);
+        editor.apply_edit(Command::Paste);
+        assert_eq!(editor.drawing.objects.len(), 2);
+        assert!(matches!(editor.drawing.objects[1].kind, Kind::Image { .. }));
     }
 }

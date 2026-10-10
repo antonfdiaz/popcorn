@@ -81,7 +81,7 @@ pub fn init(cx: &mut App) {
         KeyBinding::new(&shortcut("2"), ShowLibrary, Some("Editor")),
         KeyBinding::new(&shortcut("3"), ShowAlign, Some("Editor")),
         KeyBinding::new("f1", Help, None),
-        KeyBinding::new("space", TogglePlayback, Some("Editor")),
+        KeyBinding::new("enter", TogglePlayback, Some("Editor")),
         KeyBinding::new("left", PreviousFrame, Some("Editor")),
         KeyBinding::new("right", NextFrame, Some("Editor")),
     ]);

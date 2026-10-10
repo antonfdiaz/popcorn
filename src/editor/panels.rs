@@ -96,7 +96,7 @@ impl Editor {
             .child(v_flex().w(px(400.)).p_5().gap_3().rounded_lg().shadow_lg().bg(theme::color(theme::SURFACE_ALT)).border_1().border_color(theme::color(theme::BORDER))
                 .child(div().font_weight(FontWeight::BOLD).child(modal.title))
                 .when(matches!(modal.form,Form::New),|d|d.child(div().text_sm().child("Start with an empty stage? Save your current document first if you want to keep it.")))
-                .when(matches!(modal.form,Form::Help),|d|d.child(div().text_sm().child("Drag to draw or move. Shift constrains shapes. Transform resizes. Hand pans; Zoom clicks in (Alt: out). Right-click objects, layers or frames for editing commands. F6: keyframe · F7: blank keyframe · F5: extend · Space: play. Save/Open use the .pop document format. Library stores reusable copies, not linked symbols.")))
+                .when(matches!(modal.form,Form::Help),|d|d.child(div().text_sm().child("Drag to draw or move. Shift constrains shapes. Transform resizes. Hand pans; Zoom clicks in (Alt: out). Right-click objects, layers or frames for editing commands. F6: keyframe · F7: blank keyframe · F5: extend · Enter: play. Save/Open use the .pop document format. Library stores reusable copies, not linked symbols.")))
                 .children(modal.fields.iter().map(|(label,state)|v_flex().gap_1().child(div().text_xs().text_color(theme::color(theme::TEXT_MUTED)).child(*label)).child(Input::new(state).small())))
                 .child(div().text_xs().text_color(theme::color(theme::ACCENT)).child(modal.error.clone()))
                 .child(h_flex().gap_2().justify_end()
