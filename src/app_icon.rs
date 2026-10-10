@@ -1,4 +1,4 @@
-//! Use the same source image for the Dock during development and bundled builds.
+//! Use the macOS-specific source image for the Dock during development and bundled builds.
 
 #[cfg(target_os = "macos")]
 pub fn init() {
@@ -8,7 +8,7 @@ pub fn init() {
 
     let main_thread = MainThreadMarker::new().expect("app icon must be set on the main thread");
     // Embed the image so `cargo run` and copied executables work from any directory.
-    let data = NSData::with_bytes(include_bytes!("../popcorn.png"));
+    let data = NSData::with_bytes(include_bytes!("../popcorn-macos.png"));
     let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) else {
         eprintln!("Could not decode the Popcorn application icon");
         return;
@@ -30,7 +30,7 @@ mod tests {
 
     #[test]
     fn embedded_icon_decodes_as_a_square_appkit_image() {
-        let data = NSData::with_bytes(include_bytes!("../popcorn.png"));
+        let data = NSData::with_bytes(include_bytes!("../popcorn-macos.png"));
         let image = NSImage::initWithData(NSImage::alloc(), &data).expect("valid app icon PNG");
         assert!(image.isValid());
         assert_eq!(image.size().width, 512.);

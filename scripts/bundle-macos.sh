@@ -24,9 +24,9 @@ iconset_dir="$target_dir/bundle/Popcorn.iconset"
 mkdir -p "$bundle_dir/Contents/MacOS" "$bundle_dir/Contents/Resources" "$iconset_dir"
 
 for pixels in 16 32 128 256 512; do
-    sips -z "$pixels" "$pixels" popcorn.png --out "$iconset_dir/icon_${pixels}x${pixels}.png" >/dev/null
+    sips -z "$pixels" "$pixels" popcorn-macos.png --out "$iconset_dir/icon_${pixels}x${pixels}.png" >/dev/null
     retina_pixels=$((pixels * 2))
-    sips -z "$retina_pixels" "$retina_pixels" popcorn.png --out "$iconset_dir/icon_${pixels}x${pixels}@2x.png" >/dev/null
+    sips -z "$retina_pixels" "$retina_pixels" popcorn-macos.png --out "$iconset_dir/icon_${pixels}x${pixels}@2x.png" >/dev/null
 done
 iconutil -c icns "$iconset_dir" -o "$bundle_dir/Contents/Resources/Popcorn.icns"
 cp "$target_dir/$profile/popcorn" "$bundle_dir/Contents/MacOS/popcorn"
