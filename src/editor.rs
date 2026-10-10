@@ -15,6 +15,7 @@ mod panels;
 mod tests;
 mod workspace;
 use commands::Command;
+use gpui_kit::component::color_picker::{ColorPickerEvent, ColorPickerState};
 use gpui_kit::component::menu::{ContextMenuExt, DropdownMenu};
 
 const FRAME_COUNT: usize = 32;
@@ -138,6 +139,8 @@ pub struct Editor {
     zoom: u32,
     layers: Vec<LayerState>,
     playback_task: Option<Task<()>>,
+    color_picker: Option<Entity<ColorPickerState>>,
+    color_picker_subscription: Option<Subscription>,
 }
 
 impl Default for Editor {
@@ -168,6 +171,8 @@ impl Default for Editor {
             zoom: 100,
             layers: vec![LayerState::new("Layer 1", theme::ACCENT)],
             playback_task: None,
+            color_picker: None,
+            color_picker_subscription: None,
         }
     }
 }
@@ -181,6 +186,7 @@ macro_rules! bind_commands {
 
 impl Render for Editor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.ensure_color_picker(window, cx);
         let focus = self
             .focus
             .get_or_insert_with(|| {
@@ -242,6 +248,48 @@ impl Render for Editor {
 }
 
 impl Editor {
+    fn ensure_color_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.color_picker.is_some() {
+            return;
+        }
+        let state =
+            cx.new(|cx| ColorPickerState::new(window, cx).default_value(theme::color(self.fill)));
+        let subscription = cx.subscribe_in(
+            &state,
+            window,
+            move |editor, _, event: &ColorPickerEvent, _, cx| {
+                let ColorPickerEvent::Change(Some(color)) = event else {
+                    return;
+                };
+                let rgba = Rgba::from(*color);
+                let packed = ((rgba.r.clamp(0., 1.) * 255.).round() as u32) << 16
+                    | ((rgba.g.clamp(0., 1.) * 255.).round() as u32) << 8
+                    | (rgba.b.clamp(0., 1.) * 255.).round() as u32;
+                editor.checkpoint();
+                editor.fill = packed;
+                if let Some(i) = editor.editable_selection() {
+                    editor.drawing.objects[i].fill = packed;
+                }
+                cx.notify();
+            },
+        );
+        self.color_picker = Some(state);
+        self.color_picker_subscription = Some(subscription);
+    }
+
+    fn set_fill_color(&mut self, color: u32, window: &mut Window, cx: &mut Context<Self>) {
+        self.checkpoint();
+        self.fill = color;
+        if let Some(i) = self.editable_selection() {
+            self.drawing.objects[i].fill = color;
+        }
+        if let Some(state) = &self.color_picker {
+            state.update(cx, |state, cx| {
+                state.set_value(theme::color(color), window, cx)
+            });
+        }
+    }
+
     fn render_timeline(&self, cx: &mut Context<Self>) -> AnyElement {
         v_flex()
             .h(px(238.))

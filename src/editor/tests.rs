@@ -1,6 +1,8 @@
 use super::{Command, Editor};
 use gpui_kit::test::TestWindowExt;
-use gpui_kit::{AppContext, Bounds, TestAppContext, WindowBounds, WindowOptions, point, px, size};
+use gpui_kit::{
+    AppContext, Bounds, TestAppContext, WindowBounds, WindowOptions, hsla, point, px, size,
+};
 
 #[gpui_kit::test]
 fn visible_buttons_edit_document_and_native_shortcuts_work(cx: &mut TestAppContext) {
@@ -23,6 +25,10 @@ fn visible_buttons_edit_document_and_native_shortcuts_work(cx: &mut TestAppConte
     });
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
+        let color_picker = editor.read(cx).color_picker.clone().unwrap();
+        color_picker.update(cx, |picker, cx| {
+            picker.select_color(hsla(0., 1., 0.5, 1.), window, cx);
+        });
         #[cfg(target_os = "macos")]
         {
             let options = crate::window_chrome_options();
@@ -72,6 +78,8 @@ fn visible_buttons_edit_document_and_native_shortcuts_work(cx: &mut TestAppConte
         assert!(!editor.read(cx).is_playing);
     })
     .unwrap();
+    cx.run_until_parked();
+    assert_eq!(cx.update(|cx| editor.read(cx).fill), 0xff0000);
 }
 
 #[gpui_kit::test]

@@ -1,5 +1,6 @@
 //! Document chrome, tool rail and inspector panels.
 use super::*;
+use gpui_kit::component::color_picker::ColorPicker;
 
 impl Editor {
     pub(super) fn render_menu_bar(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -404,17 +405,60 @@ impl Editor {
                                             .border_color(theme::color(theme::TEXT_DIM))
                                             .bg(theme::color(color))
                                             .cursor_pointer()
-                                            .on_click(cx.listener(move |this, _, _, cx| {
-                                                this.checkpoint();
-                                                this.fill = color;
-                                                if let Some(i) = this.editable_selection() {
-                                                    this.drawing.objects[i].fill = color;
-                                                }
+                                            .on_click(cx.listener(move |this, _, window, cx| {
+                                                this.set_fill_color(color, window, cx);
                                                 cx.notify();
                                             }))
                                     }),
                             ),
                         )
+                        .when_some(self.color_picker.as_ref(), |section, state| {
+                            let custom_color = state
+                                .read(cx)
+                                .value()
+                                .unwrap_or_else(|| theme::color(self.fill).into());
+                            let open_state = state.clone();
+
+                            section.child(
+                                h_flex()
+                                    .gap_2()
+                                    .items_center()
+                                    .child(
+                                        div()
+                                            .relative()
+                                            .size_4()
+                                            .child(
+                                                ColorPicker::new(state)
+                                                    .xsmall()
+                                                    .absolute()
+                                                    .inset_0(),
+                                            )
+                                            .child(
+                                                div()
+                                                    .id("custom-color-trigger")
+                                                    .absolute()
+                                                    .inset_0()
+                                                    .rounded_sm()
+                                                    .border_1()
+                                                    .border_color(theme::color(theme::TEXT_DIM))
+                                                    .bg(custom_color)
+                                                    .cursor_pointer()
+                                                    .aria_label("Custom fill color")
+                                                    .on_click(move |_, _, cx| {
+                                                        open_state.update(cx, |picker, cx| {
+                                                            picker.set_open(true, cx);
+                                                        });
+                                                    }),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(theme::color(theme::TEXT_MUTED))
+                                            .child("Custom"),
+                                    ),
+                            )
+                        })
                         .child(self.property_row("Current", format!("#{:06X}", self.fill))),
                 ),
             )
