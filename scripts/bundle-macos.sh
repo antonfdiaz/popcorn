@@ -1,5 +1,4 @@
 #!/bin/bash
-# Build a local, ad-hoc-signed .app with Finder/Dock icon metadata.
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
