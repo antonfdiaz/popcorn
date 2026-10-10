@@ -80,6 +80,11 @@ enum InspectorTab {
     Align,
 }
 
+#[derive(Clone, Copy)]
+struct TimelineDrag {
+    last_frame: usize,
+}
+
 impl InspectorTab {
     const ALL: [Self; 3] = [Self::Properties, Self::Library, Self::Align];
 
@@ -116,7 +121,7 @@ impl LayerState {
 pub struct Editor {
     history: Vec<commands::Snapshot>,
     future: Vec<commands::Snapshot>,
-    clipboard: Option<workspace::Object>,
+    clipboard: Option<Vec<workspace::Object>>,
     symbols: Vec<workspace::Object>,
     frame_count: usize,
     fps: u32,
@@ -138,6 +143,13 @@ pub struct Editor {
     selected_layer: usize,
     zoom: u32,
     layers: Vec<LayerState>,
+    selected_frames: Vec<(usize, usize)>,
+    selected_layers: Vec<usize>,
+    frame_selection_anchor: Option<(usize, usize)>,
+    layer_selection_anchor: Option<usize>,
+    timeline_drag: Option<TimelineDrag>,
+    timeline_pointer_handled: bool,
+    text_editing: Option<usize>,
     playback_task: Option<Task<()>>,
     color_picker: Option<Entity<ColorPickerState>>,
     color_picker_subscription: Option<Subscription>,
@@ -170,6 +182,13 @@ impl Default for Editor {
             selected_layer: 0,
             zoom: 100,
             layers: vec![LayerState::new("Layer 1", theme::ACCENT)],
+            selected_frames: Vec::new(),
+            selected_layers: vec![0],
+            frame_selection_anchor: None,
+            layer_selection_anchor: Some(0),
+            timeline_drag: None,
+            timeline_pointer_handled: false,
+            text_editing: None,
             playback_task: None,
             color_picker: None,
             color_picker_subscription: None,
@@ -200,7 +219,11 @@ impl Render for Editor {
             .track_focus(&focus)
             .key_context("Editor")
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                if this.edit_text(event) {
+                if event.keystroke.key == "escape" {
+                    this.cancel_interaction();
+                    cx.stop_propagation();
+                    cx.notify();
+                } else if this.edit_text(event) {
                     cx.stop_propagation();
                     cx.notify();
                 }
@@ -234,7 +257,7 @@ impl Render for Editor {
         bind_commands!(root,cx;
             NewDocument=>New,OpenDocument=>Open,SaveDocument=>Save,SaveAsDocument=>SaveAs,
             Undo=>Undo,Redo=>Redo,Copy=>Copy,Cut=>Cut,Paste=>Paste,Duplicate=>Duplicate,DeleteSelection=>Delete,
-            AddLayer=>AddLayer,DeleteLayer=>DeleteLayer,InsertKeyframe=>Keyframe,BlankKeyframe=>BlankKeyframe,ClearKeyframe=>ClearKeyframe,ExtendTimeline=>Extend,
+            AddLayer=>AddLayer,DeleteLayer=>DeleteLayer,InsertKeyframe=>Keyframe,BlankKeyframe=>BlankKeyframe,ClearKeyframe=>ClearKeyframe,DeleteSelectedFrames=>DeleteFrames,MoveSelectedFramesLeft=>MoveFramesLeft,MoveSelectedFramesRight=>MoveFramesRight,ExtendTimeline=>Extend,
             ToggleGrid=>Grid,FitStage=>Fit,ZoomIn=>ZoomIn,ZoomOut=>ZoomOut,ToggleOnion=>Onion,ToggleLoop=>Loop,
             ShowProperties=>Properties,ShowLibrary=>Library,ShowAlign=>Align,Help=>Help
         )
@@ -267,7 +290,8 @@ impl Editor {
                     | (rgba.b.clamp(0., 1.) * 255.).round() as u32;
                 editor.checkpoint();
                 editor.fill = packed;
-                if let Some(i) = editor.editable_selection() {
+                let selected = editor.editable_selections();
+                for i in selected {
                     editor.drawing.objects[i].fill = packed;
                 }
                 cx.notify();
@@ -280,7 +304,8 @@ impl Editor {
     fn set_fill_color(&mut self, color: u32, window: &mut Window, cx: &mut Context<Self>) {
         self.checkpoint();
         self.fill = color;
-        if let Some(i) = self.editable_selection() {
+        let selected = self.editable_selections();
+        for i in selected {
             self.drawing.objects[i].fill = color;
         }
         if let Some(state) = &self.color_picker {
@@ -375,6 +400,10 @@ impl Editor {
             .bg(theme::color(theme::SURFACE))
             .children((1..=self.frame_count).map(|frame| {
                 let is_current = frame == self.current_frame;
+                let is_selected = self
+                    .selected_frames
+                    .iter()
+                    .any(|(_, selected_frame)| *selected_frame == frame);
                 div()
                     .w(px(FRAME_WIDTH))
                     .h_full()
@@ -385,7 +414,13 @@ impl Editor {
                     .pb_1()
                     .border_r_1()
                     .border_color(theme::color(theme::GRID))
-                    .when(is_current, |this| this.bg(theme::color(theme::ACCENT_SOFT)))
+                    .when(is_current || is_selected, |this| {
+                        this.bg(theme::color(if is_current {
+                            theme::ACCENT_SOFT
+                        } else {
+                            0x3a2d3a
+                        }))
+                    })
                     .text_xs()
                     .text_color(if is_current {
                         theme::color(theme::ACCENT)
@@ -398,8 +433,12 @@ impl Editor {
                         String::new()
                     })
                     .id(format!("ruler-{frame}"))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.current_frame = frame;
+                    .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+                        this.select_timeline_frame(
+                            this.selected_layer,
+                            frame,
+                            event.modifiers().shift,
+                        );
                         cx.notify();
                     }))
             }))
@@ -414,7 +453,7 @@ impl Editor {
             .border_r_1()
             .border_color(theme::color(theme::BORDER))
             .children(self.layers.iter().enumerate().map(|(index, layer)| {
-                let selected = self.selected_layer == index;
+                let selected = self.is_layer_selected(index);
                 h_flex()
                     .h_8()
                     .flex_shrink_0()
@@ -451,15 +490,13 @@ impl Editor {
                     .id(format!("layer-{index}"))
                     .on_mouse_down(
                         MouseButton::Right,
-                        cx.listener(move |this, _, _, cx| {
-                            this.selected_layer = index;
-                            this.drawing.selected = None;
+                        cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                            this.context_select_timeline_layer(index, event.modifiers.shift);
                             cx.notify();
                         }),
                     )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.selected_layer = index;
-                        this.drawing.selected = None;
+                    .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+                        this.select_timeline_layer(index, event.modifiers().shift);
                         cx.notify();
                     }))
                     .test_support()
@@ -497,6 +534,7 @@ impl Editor {
                     .flex_shrink_0()
                     .children((1..=self.frame_count).map(|frame| {
                         let current = frame == self.current_frame;
+                        let selected = self.is_frame_selected(layer_index, frame);
                         let active = layer
                             .keyframes
                             .iter()
@@ -521,7 +559,9 @@ impl Editor {
                             .border_r_1()
                             .border_b_1()
                             .border_color(theme::color(theme::GRID))
-                            .bg(if current {
+                            .bg(if selected {
+                                theme::color(0x4a2d39)
+                            } else if current {
                                 theme::color(0x4a302d)
                             } else {
                                 theme::color(theme::SURFACE)
@@ -549,16 +589,50 @@ impl Editor {
                             .when(current, |this| {
                                 this.border_l_1().border_color(theme::color(theme::ACCENT))
                             })
+                            .when(selected, |this| {
+                                this.border_1().border_color(theme::color(theme::ACCENT))
+                            })
                             .id(format!("frame-{layer_index}-{frame}"))
                             .on_mouse_down(
                                 MouseButton::Right,
-                                cx.listener(move |this, _, _, cx| {
-                                    this.select_frame(layer_index, frame);
+                                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                                    this.context_select_timeline_frame(
+                                        layer_index,
+                                        frame,
+                                        event.modifiers.shift,
+                                    );
                                     cx.notify();
                                 }),
                             )
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.select_frame(layer_index, frame);
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                                    this.begin_timeline_drag(
+                                        layer_index,
+                                        frame,
+                                        event.modifiers.shift,
+                                    );
+                                    cx.notify();
+                                }),
+                            )
+                            .on_mouse_move(cx.listener(
+                                move |this, event: &MouseMoveEvent, _, cx| {
+                                    if event.dragging() {
+                                        this.update_timeline_drag(layer_index, frame);
+                                        cx.notify();
+                                    }
+                                },
+                            ))
+                            .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+                                if this.timeline_pointer_handled {
+                                    this.timeline_pointer_handled = false;
+                                } else {
+                                    this.select_timeline_frame(
+                                        layer_index,
+                                        frame,
+                                        event.modifiers().shift,
+                                    );
+                                }
                                 cx.notify();
                             }))
                             .test_support()
@@ -575,6 +649,15 @@ impl Editor {
                                                     Command::BlankKeyframe,
                                                 ),
                                                 ("Clear keyframe", Command::ClearKeyframe),
+                                                ("Delete selected frames", Command::DeleteFrames),
+                                                (
+                                                    "Move selected frames left",
+                                                    Command::MoveFramesLeft,
+                                                ),
+                                                (
+                                                    "Move selected frames right",
+                                                    Command::MoveFramesRight,
+                                                ),
                                                 ("Extend timeline", Command::Extend),
                                             ],
                                             cx,
@@ -585,6 +668,13 @@ impl Editor {
                             })
                     }))
             }))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    this.finish_timeline_drag();
+                    cx.notify();
+                }),
+            )
             .into_any_element()
     }
 
@@ -760,7 +850,7 @@ impl Editor {
                 } else {
                     this.layers[index].locked = !this.layers[index].locked;
                 }
-                this.drawing.selected = None;
+                this.clear_selection();
                 cx.notify();
             }))
     }

@@ -23,6 +23,9 @@ actions!(
         InsertKeyframe,
         BlankKeyframe,
         ClearKeyframe,
+        DeleteSelectedFrames,
+        MoveSelectedFramesLeft,
+        MoveSelectedFramesRight,
         ExtendTimeline,
         ToggleGrid,
         FitStage,
@@ -127,6 +130,9 @@ pub fn init(cx: &mut App) {
         ]),
         Menu::new("Modify").items([
             MenuItem::action("Clear Keyframe", ClearKeyframe),
+            MenuItem::action("Delete Selected Frames", DeleteSelectedFrames),
+            MenuItem::action("Move Selected Frames Left", MoveSelectedFramesLeft),
+            MenuItem::action("Move Selected Frames Right", MoveSelectedFramesRight),
             MenuItem::action("Delete Layer", DeleteLayer),
         ]),
         Menu::new("Control").items([

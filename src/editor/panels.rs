@@ -97,7 +97,7 @@ impl Editor {
             .child(v_flex().w(px(400.)).p_5().gap_3().rounded_lg().shadow_lg().bg(theme::color(theme::SURFACE_ALT)).border_1().border_color(theme::color(theme::BORDER))
                 .child(div().font_weight(FontWeight::BOLD).child(modal.title))
                 .when(matches!(modal.form,Form::New),|d|d.child(div().text_sm().child("Start with an empty stage? Save your current document first if you want to keep it.")))
-                .when(matches!(modal.form,Form::Help),|d|d.child(div().text_sm().child("Drag to draw or move. Select an object to show its controls; drag the corner handles to scale and the top handle to rotate. Shift constrains shapes, keeps transform proportions and snaps rotation. Hand pans; Zoom clicks in (Alt: out). Right-click objects, layers or frames for editing commands. F6: keyframe · F7: blank keyframe · F5: extend · Enter: play. Save/Open use the .pop document format. Library stores reusable copies, not linked symbols.")))
+                .when(matches!(modal.form,Form::Help),|d|d.child(div().text_sm().child("Drag to draw or move. Shift-click selects multiple objects, frames, or layers; drag selected keyframes horizontally to move them together. Group handles scale and rotate objects together. Double-click text to edit it; Escape cancels the current operation. Shift constrains shapes, keeps transform proportions and snaps rotation. Hand pans; Zoom clicks in (Alt: out). Right-click objects, layers or frames for editing commands. Delete removes selected frames or objects. F6: keyframe · F7: blank keyframe · F5: extend · Enter: play. Save/Open use the .pop document format. Library stores reusable copies, not linked symbols.")))
                 .children(modal.fields.iter().map(|(label,state)|v_flex().gap_1().child(div().text_xs().text_color(theme::color(theme::TEXT_MUTED)).child(*label)).child(Input::new(state).small())))
                 .child(div().text_xs().text_color(theme::color(theme::ACCENT)).child(modal.error.clone()))
                 .child(h_flex().gap_2().justify_end()
@@ -169,10 +169,14 @@ impl Editor {
                     self.checkpoint();
                     self.layers = vec![LayerState::new("Layer 1", theme::ACCENT)];
                     self.drawing.objects.clear();
-                    self.drawing.selected = None;
+                    self.clear_selection();
                     self.drawing.drag = None;
+                    self.text_editing = None;
                     self.symbols.clear();
                     self.selected_layer = 0;
+                    self.set_layer_selection([0]);
+                    self.layer_selection_anchor = Some(0);
+                    self.clear_timeline_selection();
                     self.current_frame = 1;
                     self.frame_count = 32;
                     self.stage_size = [800., 450.];

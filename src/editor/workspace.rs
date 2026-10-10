@@ -35,7 +35,21 @@ pub(super) enum Corner {
 
 pub(super) enum Drag {
     Draw(usize, [f32; 2]),
-    Move(usize, [f32; 2], [f32; 2]),
+    Move {
+        items: Vec<(usize, [f32; 2])>,
+        start: [f32; 2],
+    },
+    ScaleGroup {
+        items: Vec<TransformItem>,
+        corner: Corner,
+        bounds: [f32; 4],
+        start_size: [f32; 2],
+    },
+    RotateGroup {
+        items: Vec<TransformItem>,
+        center: [f32; 2],
+        start_pointer_angle: f32,
+    },
     Scale {
         index: usize,
         corner: Corner,
@@ -54,6 +68,16 @@ pub(super) enum Drag {
 }
 
 #[derive(Clone, Copy)]
+pub(super) struct TransformItem {
+    index: usize,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    rotation: f32,
+}
+
+#[derive(Clone, Copy)]
 enum TransformHit {
     Corner(Corner),
     Rotate,
@@ -62,6 +86,7 @@ enum TransformHit {
 pub(super) struct Drawing {
     pub(super) objects: Vec<Object>,
     pub(super) selected: Option<usize>,
+    pub(super) selection: Vec<usize>,
     pub(super) drag: Option<Drag>,
     pub(super) pan: [f32; 2],
     pub(super) bounds: Rc<Cell<Bounds<Pixels>>>,
@@ -72,6 +97,7 @@ impl Default for Drawing {
         Self {
             objects: Vec::new(),
             selected: None,
+            selection: Vec::new(),
             drag: None,
             pan: [0., 0.],
             bounds: Rc::new(Cell::new(Bounds::default())),
@@ -377,6 +403,45 @@ impl Editor {
             .map(|(i, _)| i)
     }
 
+    pub(super) fn selection_bounds(&self) -> Option<[f32; 4]> {
+        let indices = self.selected_indices();
+        if indices.is_empty() {
+            return None;
+        }
+        let mut min_x = f32::INFINITY;
+        let mut min_y = f32::INFINITY;
+        let mut max_x = f32::NEG_INFINITY;
+        let mut max_y = f32::NEG_INFINITY;
+        for index in indices {
+            let object = &self.drawing.objects[index];
+            for point in Self::object_corners(object) {
+                min_x = min_x.min(point[0]);
+                min_y = min_y.min(point[1]);
+                max_x = max_x.max(point[0]);
+                max_y = max_y.max(point[1]);
+            }
+        }
+        Some([min_x, min_y, max_x - min_x, max_y - min_y])
+    }
+
+    fn selection_transform_hit(&self, p: [f32; 2], scale: f32) -> Option<TransformHit> {
+        let [x, y, w, h] = self.selection_bounds()?;
+        let tolerance = (10. / scale).max(5.);
+        let close = |a: [f32; 2], b: [f32; 2]| (a[0] - b[0]).hypot(a[1] - b[1]) <= tolerance;
+        let corners = [
+            (Corner::TopLeft, [x, y]),
+            (Corner::TopRight, [x + w, y]),
+            (Corner::BottomRight, [x + w, y + h]),
+            (Corner::BottomLeft, [x, y + h]),
+        ];
+        for (corner, point) in corners {
+            if close(point, p) {
+                return Some(TransformHit::Corner(corner));
+            }
+        }
+        close([x + w / 2., y - 28.], p).then_some(TransformHit::Rotate)
+    }
+
     fn transform_hit(&self, o: &Object, p: [f32; 2], scale: f32) -> Option<TransformHit> {
         let center = [o.x + o.w / 2., o.y + o.h / 2.];
         let corners = Self::object_corners(o);
@@ -398,16 +463,26 @@ impl Editor {
     }
 
     fn render_transform_overlay(&self, scale: f32) -> Div {
-        let Some(index) = self.drawing.selected else {
+        let selection = self.selected_indices();
+        if selection.is_empty() {
             return div();
+        }
+        let (corners, rotate, top_mid) = if selection.len() == 1 {
+            let object = self.drawing.objects[selection[0]].clone();
+            let center = [object.x + object.w / 2., object.y + object.h / 2.];
+            let corners = Self::object_corners(&object);
+            let top_mid = Self::rotated_point(center, [center[0], object.y], object.rotation);
+            (
+                corners,
+                Self::rotated_point(center, [center[0], object.y - 28.], object.rotation),
+                top_mid,
+            )
+        } else {
+            let [x, y, w, h] = self.selection_bounds().unwrap();
+            let corners = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+            let center = [x + w / 2., y + h / 2.];
+            (corners, [center[0], y - 28.], [center[0], y])
         };
-        let Some(object) = self.drawing.objects.get(index) else {
-            return div();
-        };
-        let object = object.clone();
-        let corners = Self::object_corners(&object);
-        let center = [object.x + object.w / 2., object.y + object.h / 2.];
-        let rotate = Self::rotated_point(center, [center[0], object.y - 28.], object.rotation);
         let handles = corners
             .iter()
             .copied()
@@ -445,8 +520,6 @@ impl Editor {
                         path.close();
                         let line_end = canvas_bounds.origin
                             + point(px(rotate[0] * scale), px(rotate[1] * scale));
-                        let top_mid =
-                            Self::rotated_point(center, [center[0], object.y], object.rotation);
                         path.move_to(
                             canvas_bounds.origin
                                 + point(px(top_mid[0] * scale), px(top_mid[1] * scale)),
@@ -558,9 +631,11 @@ impl Editor {
                                         .map(|o| Self::render_object(o, scale, false).opacity(0.2)),
                                 )
                             })
-                            .children(objects.into_iter().map(|(i, o)| {
-                                Self::render_object(o, scale, self.drawing.selected == Some(i))
-                            }))
+                            .children(
+                                objects.into_iter().map(|(i, o)| {
+                                    Self::render_object(o, scale, self.is_selected(i))
+                                }),
+                            )
                             .when(
                                 matches!(self.selected_tool, Tool::Select | Tool::Transform),
                                 |stage| stage.child(self.render_transform_overlay(scale)),
@@ -572,7 +647,12 @@ impl Editor {
                             if let Some(focus) = &this.focus {
                                 window.focus(focus, cx);
                             }
-                            this.pointer_down(e.position, e.modifiers.alt);
+                            this.pointer_down_with_modifiers(
+                                e.position,
+                                e.modifiers.alt,
+                                e.modifiers.shift,
+                                e.click_count,
+                            );
                             cx.notify();
                         }),
                     )
@@ -597,9 +677,12 @@ impl Editor {
                             if let Some(f) = &this.focus {
                                 window.focus(f, cx);
                             }
-                            this.drawing.selected = this.hit_test(this.document_point(e.position));
-                            if let Some(i) = this.drawing.selected {
-                                this.selected_layer = this.drawing.objects[i].layer;
+                            let hit = this.hit_test(this.document_point(e.position));
+                            this.set_selection(hit);
+                            if let Some(i) = hit {
+                                let layer = this.drawing.objects[i].layer;
+                                this.set_layer_selection([layer]);
+                                this.clear_timeline_selection();
                             }
                             cx.notify();
                         }),
@@ -698,6 +781,7 @@ impl Editor {
             }
             if imported == 0 {
                 self.checkpoint();
+                self.clear_timeline_selection();
             }
             let w = 320.;
             let h = 200.;
@@ -720,7 +804,7 @@ impl Editor {
                 fill: self.fill,
                 rotation: 0.,
             });
-            self.drawing.selected = Some(index);
+            self.set_selection([index]);
             imported += 1;
         }
         self.status = if imported == 0 {
@@ -733,7 +817,18 @@ impl Editor {
         };
     }
 
+    #[cfg(test)]
     fn pointer_down(&mut self, pos: Point<Pixels>, alt: bool) {
+        self.pointer_down_with_modifiers(pos, alt, false, 1);
+    }
+
+    fn pointer_down_with_modifiers(
+        &mut self,
+        pos: Point<Pixels>,
+        alt: bool,
+        shift: bool,
+        click_count: usize,
+    ) {
         let p = self.document_point(pos);
         if self.selected_tool == Tool::Hand {
             self.drawing.drag = Some(Drag::Pan([pos.x.into(), pos.y.into()], self.drawing.pan));
@@ -747,24 +842,115 @@ impl Editor {
             };
             return;
         }
+        self.clear_timeline_selection();
         if matches!(self.selected_tool, Tool::Select | Tool::Transform) {
             let scale = self.zoom as f32 / 100.;
-            let selected_before = self.drawing.selected;
-            let handle = matches!(self.selected_tool, Tool::Select | Tool::Transform)
-                .then(|| selected_before.and_then(|i| self.drawing.objects.get(i)))
-                .flatten()
-                .and_then(|o| self.transform_hit(o, p, scale));
             let hit = self.hit_test(p);
-            self.drawing.selected = if handle.is_some() {
-                selected_before
+            if click_count == 2 {
+                if let Some(i) = hit {
+                    if matches!(self.drawing.objects[i].kind, Kind::Text(_)) {
+                        self.set_selection([i]);
+                        self.text_editing = Some(i);
+                        self.drawing.drag = None;
+                        let layer = self.drawing.objects[i].layer;
+                        self.set_layer_selection([layer]);
+                        return;
+                    }
+                }
+            }
+
+            let selected_before = self.selected_indices();
+            let primary_before = self.drawing.selected;
+            let preserve_group = selected_before.len() > 1
+                && hit.is_some_and(|index| selected_before.contains(&index));
+            let handle = if !shift {
+                if selected_before.len() == 1 {
+                    primary_before
+                        .and_then(|i| self.drawing.objects.get(i))
+                        .and_then(|o| self.transform_hit(o, p, scale))
+                } else if selected_before.len() > 1 {
+                    self.selection_transform_hit(p, scale)
+                } else {
+                    None
+                }
             } else {
-                hit
+                None
             };
+
+            if shift {
+                if let Some(i) = hit {
+                    let mut selection = selected_before;
+                    if let Some(position) = selection.iter().position(|selected| *selected == i) {
+                        selection.remove(position);
+                    } else {
+                        selection.push(i);
+                    }
+                    self.set_selection(selection);
+                }
+                self.drawing.drag = None;
+                return;
+            }
+
+            self.set_selection(if handle.is_some() && selected_before.len() > 1 {
+                selected_before.clone()
+            } else if handle.is_some() {
+                primary_before.into_iter().collect()
+            } else if preserve_group {
+                selected_before.clone()
+            } else {
+                hit.into_iter().collect()
+            });
+            self.text_editing = None;
             if let Some(i) = self.drawing.selected {
                 self.checkpoint();
+                let layer = self.drawing.objects[i].layer;
+                self.set_layer_selection([layer]);
                 let o = &self.drawing.objects[i];
-                self.selected_layer = o.layer;
-                self.drawing.drag = if let Some(handle) = handle {
+                let group_transform =
+                    selected_before.len() > 1 && (handle.is_some() || preserve_group);
+                self.drawing.drag = if group_transform {
+                    let items = selected_before
+                        .iter()
+                        .filter_map(|index| {
+                            self.drawing
+                                .objects
+                                .get(*index)
+                                .map(|object| TransformItem {
+                                    index: *index,
+                                    x: object.x,
+                                    y: object.y,
+                                    w: object.w,
+                                    h: object.h,
+                                    rotation: object.rotation,
+                                })
+                        })
+                        .collect::<Vec<_>>();
+                    let bounds = self.selection_bounds().unwrap();
+                    match handle {
+                        Some(TransformHit::Corner(corner)) => Some(Drag::ScaleGroup {
+                            items,
+                            corner,
+                            bounds,
+                            start_size: [bounds[2], bounds[3]],
+                        }),
+                        Some(TransformHit::Rotate) => {
+                            let center = [bounds[0] + bounds[2] / 2., bounds[1] + bounds[3] / 2.];
+                            Some(Drag::RotateGroup {
+                                items,
+                                center,
+                                start_pointer_angle: (p[1] - center[1]).atan2(p[0] - center[0]),
+                            })
+                        }
+                        None if preserve_group => Some(Drag::Move {
+                            items: items
+                                .iter()
+                                .map(|item| (item.index, [item.x, item.y]))
+                                .collect(),
+                            start: p,
+                        }),
+                        None => None,
+                    }
+                } else if let Some(handle) = handle {
                     let center = [o.x + o.w / 2., o.y + o.h / 2.];
                     match handle {
                         TransformHit::Rotate => Some(Drag::Rotate {
@@ -791,7 +977,17 @@ impl Editor {
                         }
                     }
                 } else if hit.is_some() {
-                    Some(Drag::Move(i, p, [o.x, o.y]))
+                    let items = self
+                        .selected_indices()
+                        .into_iter()
+                        .filter_map(|index| {
+                            self.drawing
+                                .objects
+                                .get(index)
+                                .map(|object| (index, [object.x, object.y]))
+                        })
+                        .collect();
+                    Some(Drag::Move { items, start: p })
                 } else {
                     None
                 };
@@ -827,7 +1023,8 @@ impl Editor {
             fill: self.fill,
             rotation: 0.,
         });
-        self.drawing.selected = Some(i);
+        self.set_selection([i]);
+        self.text_editing = text.then_some(i);
         self.drawing.drag = if text { None } else { Some(Drag::Draw(i, p)) };
     }
 
@@ -840,10 +1037,81 @@ impl Editor {
                     initial[1] + f32::from(pos.y) - start[1],
                 ]
             }
-            Some(Drag::Move(i, start, initial)) => {
-                let o = &mut self.drawing.objects[*i];
-                o.x = initial[0] + p[0] - start[0];
-                o.y = initial[1] + p[1] - start[1];
+            Some(Drag::ScaleGroup {
+                items,
+                corner,
+                bounds,
+                start_size,
+            }) => {
+                let [x, y, width, height] = *bounds;
+                let [anchor_x, anchor_y] = match corner {
+                    Corner::TopLeft => [x + width, y + height],
+                    Corner::TopRight => [x, y + height],
+                    Corner::BottomRight => [x, y],
+                    Corner::BottomLeft => [x + width, y],
+                };
+                let mut new_width = match corner {
+                    Corner::TopLeft | Corner::BottomLeft => anchor_x - p[0],
+                    Corner::TopRight | Corner::BottomRight => p[0] - anchor_x,
+                }
+                .abs()
+                .max(2.);
+                let mut new_height = match corner {
+                    Corner::TopLeft | Corner::TopRight => anchor_y - p[1],
+                    Corner::BottomLeft | Corner::BottomRight => p[1] - anchor_y,
+                }
+                .abs()
+                .max(2.);
+                if shift {
+                    let ratio = start_size[0] / start_size[1];
+                    if new_width / new_height > ratio {
+                        new_height = (new_width / ratio).max(2.);
+                    } else {
+                        new_width = (new_height * ratio).max(2.);
+                    }
+                }
+                let new_min = match corner {
+                    Corner::TopLeft => [anchor_x - new_width, anchor_y - new_height],
+                    Corner::TopRight => [anchor_x, anchor_y - new_height],
+                    Corner::BottomRight => [anchor_x, anchor_y],
+                    Corner::BottomLeft => [anchor_x - new_width, anchor_y],
+                };
+                let scale_x = new_width / width.max(0.001);
+                let scale_y = new_height / height.max(0.001);
+                for item in items {
+                    let object = &mut self.drawing.objects[item.index];
+                    object.x = new_min[0] + (item.x - x) * scale_x;
+                    object.y = new_min[1] + (item.y - y) * scale_y;
+                    object.w = (item.w * scale_x).max(2.);
+                    object.h = (item.h * scale_y).max(2.);
+                }
+            }
+            Some(Drag::RotateGroup {
+                items,
+                center,
+                start_pointer_angle,
+            }) => {
+                let mut delta = (p[1] - center[1]).atan2(p[0] - center[0]) - *start_pointer_angle;
+                if shift {
+                    let increment = 15_f32.to_radians();
+                    delta = (delta / increment).round() * increment;
+                }
+                for item in items {
+                    let item_center = [item.x + item.w / 2., item.y + item.h / 2.];
+                    let next_center = Self::rotated_point(*center, item_center, delta);
+                    let object = &mut self.drawing.objects[item.index];
+                    object.x = next_center[0] - item.w / 2.;
+                    object.y = next_center[1] - item.h / 2.;
+                    object.rotation = item.rotation + delta;
+                }
+            }
+            Some(Drag::Move { items, start }) => {
+                let delta = [p[0] - start[0], p[1] - start[1]];
+                for (index, initial) in items {
+                    let o = &mut self.drawing.objects[*index];
+                    o.x = initial[0] + delta[0];
+                    o.y = initial[1] + delta[1];
+                }
             }
             Some(Drag::Scale {
                 index,
@@ -923,16 +1191,88 @@ impl Editor {
         }
     }
 
+    pub(super) fn cancel_interaction(&mut self) {
+        if let Some(drag) = self.drawing.drag.take() {
+            match drag {
+                Drag::Draw(index, _) => {
+                    if index < self.drawing.objects.len() {
+                        self.drawing.objects.remove(index);
+                    }
+                    self.clear_selection();
+                }
+                Drag::Move { items, .. } => {
+                    for (index, initial) in items {
+                        if let Some(object) = self.drawing.objects.get_mut(index) {
+                            object.x = initial[0];
+                            object.y = initial[1];
+                        }
+                    }
+                }
+                Drag::ScaleGroup { items, .. } | Drag::RotateGroup { items, .. } => {
+                    for item in items {
+                        if let Some(object) = self.drawing.objects.get_mut(item.index) {
+                            object.x = item.x;
+                            object.y = item.y;
+                            object.w = item.w;
+                            object.h = item.h;
+                            object.rotation = item.rotation;
+                        }
+                    }
+                }
+                Drag::Scale {
+                    index,
+                    center,
+                    rotation,
+                    start_size,
+                    ..
+                } => {
+                    if let Some(object) = self.drawing.objects.get_mut(index) {
+                        object.w = start_size[0];
+                        object.h = start_size[1];
+                        object.x = center[0] - start_size[0] / 2.;
+                        object.y = center[1] - start_size[1] / 2.;
+                        object.rotation = rotation;
+                    }
+                }
+                Drag::Rotate {
+                    index,
+                    start_rotation,
+                    ..
+                } => {
+                    if let Some(object) = self.drawing.objects.get_mut(index) {
+                        object.rotation = start_rotation;
+                    }
+                }
+                Drag::Pan(_, initial) => self.drawing.pan = initial,
+            }
+        }
+
+        if let Some(index) = self.text_editing.take() {
+            let remove =
+                self.drawing.objects.get(index).is_some_and(
+                    |object| matches!(&object.kind, Kind::Text(text) if text.is_empty()),
+                );
+            if remove {
+                self.drawing.objects.remove(index);
+                self.clear_selection();
+            }
+        }
+    }
+
     pub(super) fn edit_text(&mut self, event: &KeyDownEvent) -> bool {
         if self.modal.is_some()
-            || self.selected_tool != Tool::Text
             || event.keystroke.modifiers.platform
             || event.keystroke.modifiers.control
             || event.keystroke.modifiers.alt
         {
             return false;
         }
-        let Some(i) = self.editable_selection() else {
+        let i = self.text_editing.or_else(|| {
+            (self.selected_tool == Tool::Text)
+                .then(|| self.editable_selection())
+                .flatten()
+        });
+        let Some(i) = i else {
             return false;
         };
         if !matches!(self.drawing.objects[i].kind, Kind::Text(_)) {
@@ -1016,6 +1356,127 @@ mod tests {
         editor.pointer_move(point(px(260.), px(95.)), false);
         let object = &editor.drawing.objects[0];
         assert_eq!([object.x, object.y], [320., 140.]);
+    }
+
+    #[::core::prelude::v1::test]
+    fn shift_selects_multiple_objects_and_moves_them_as_a_group() {
+        let mut editor = editor();
+        editor.drawing.objects.extend([
+            Object {
+                kind: Kind::Rectangle,
+                x: 100.,
+                y: 100.,
+                w: 40.,
+                h: 40.,
+                layer: 0,
+                keyframe: 1,
+                fill: theme::ACCENT,
+                rotation: 0.,
+            },
+            Object {
+                kind: Kind::Rectangle,
+                x: 200.,
+                y: 100.,
+                w: 40.,
+                h: 40.,
+                layer: 0,
+                keyframe: 1,
+                fill: theme::BLUE,
+                rotation: 0.,
+            },
+        ]);
+        editor.selected_tool = Tool::Select;
+        editor.pointer_down(point(px(120.), px(120.)), false);
+        editor.pointer_down_with_modifiers(point(px(220.), px(120.)), false, true, 1);
+        assert_eq!(editor.selected_indices(), vec![0, 1]);
+        editor.pointer_down(point(px(120.), px(120.)), false);
+        editor.pointer_move(point(px(140.), px(150.)), false);
+        assert_eq!(
+            [editor.drawing.objects[0].x, editor.drawing.objects[0].y],
+            [120., 130.]
+        );
+        assert_eq!(
+            [editor.drawing.objects[1].x, editor.drawing.objects[1].y],
+            [220., 130.]
+        );
+    }
+
+    #[::core::prelude::v1::test]
+    fn group_transform_scales_and_rotates_all_selected_objects() {
+        let mut editor = editor();
+        editor.drawing.objects.extend([
+            Object {
+                kind: Kind::Rectangle,
+                x: 100.,
+                y: 100.,
+                w: 40.,
+                h: 40.,
+                layer: 0,
+                keyframe: 1,
+                fill: theme::ACCENT,
+                rotation: 0.,
+            },
+            Object {
+                kind: Kind::Rectangle,
+                x: 200.,
+                y: 100.,
+                w: 40.,
+                h: 40.,
+                layer: 0,
+                keyframe: 1,
+                fill: theme::BLUE,
+                rotation: 0.,
+            },
+        ]);
+        editor.selected_tool = Tool::Transform;
+        editor.set_selection([0, 1]);
+        editor.pointer_down_with_modifiers(point(px(240.), px(140.)), false, false, 1);
+        editor.pointer_move(point(px(380.), px(220.)), false);
+        assert_eq!(
+            [editor.drawing.objects[0].x, editor.drawing.objects[0].y],
+            [100., 100.]
+        );
+        assert_eq!(
+            [editor.drawing.objects[0].w, editor.drawing.objects[0].h],
+            [80., 120.]
+        );
+        assert_eq!(
+            [editor.drawing.objects[1].x, editor.drawing.objects[1].y],
+            [300., 100.]
+        );
+
+        editor.drawing.drag = None;
+        editor.pointer_down_with_modifiers(point(px(240.), px(72.)), false, false, 1);
+        editor.pointer_move(point(px(288.), px(160.)), false);
+        assert!((editor.drawing.objects[0].rotation - std::f32::consts::FRAC_PI_2).abs() < 0.01);
+        assert!((editor.drawing.objects[1].rotation - std::f32::consts::FRAC_PI_2).abs() < 0.01);
+    }
+
+    #[::core::prelude::v1::test]
+    fn escape_cancels_a_new_shape_and_double_click_enters_text_editing() {
+        let mut editor = editor();
+        editor.selected_tool = Tool::Rectangle;
+        editor.pointer_down(point(px(100.), px(100.)), false);
+        editor.pointer_move(point(px(180.), px(160.)), false);
+        editor.cancel_interaction();
+        assert!(editor.drawing.objects.is_empty());
+        assert!(editor.drawing.drag.is_none());
+
+        editor.drawing.objects.push(Object {
+            kind: Kind::Text("Hello".into()),
+            x: 100.,
+            y: 100.,
+            w: 200.,
+            h: 36.,
+            layer: 0,
+            keyframe: 1,
+            fill: theme::TEXT,
+            rotation: 0.,
+        });
+        editor.selected_tool = Tool::Select;
+        editor.pointer_down_with_modifiers(point(px(120.), px(120.)), false, false, 2);
+        assert_eq!(editor.text_editing, Some(0));
+        assert_eq!(editor.drawing.selected, Some(0));
     }
 
     #[::core::prelude::v1::test]

@@ -45,6 +45,18 @@ impl Editor {
                 ],
             ),
             (
+                "Modify",
+                vec![
+                    ("Clear keyframe", Command::ClearKeyframe),
+                    ("Delete selected frames", Command::DeleteFrames),
+                    ("Move selected frames left", Command::MoveFramesLeft),
+                    ("Move selected frames right", Command::MoveFramesRight),
+                    ("Move layer up", Command::LayerUp),
+                    ("Move layer down", Command::LayerDown),
+                    ("Delete layer", Command::DeleteLayer),
+                ],
+            ),
+            (
                 "Window",
                 vec![
                     ("Properties", Command::Properties),
@@ -312,6 +324,58 @@ impl Editor {
 
     fn render_properties(&self, cx: &mut Context<Self>) -> AnyElement {
         let selection = self.editable_selection().map(|i| &self.drawing.objects[i]);
+        let selected_count = self.selected_indices().len();
+        let selection_layer = if selected_count > 1 {
+            let mut layers = self
+                .selected_indices()
+                .into_iter()
+                .map(|i| self.drawing.objects[i].layer);
+            let first = layers.next();
+            if first.is_some() && layers.all(|layer| Some(layer) == first) {
+                first
+                    .map(|layer| self.layers[layer].name.clone())
+                    .unwrap_or_else(|| "Multiple".into())
+            } else {
+                "Multiple".into()
+            }
+        } else {
+            self.layers[self.selected_layer].name.clone()
+        };
+        let selection_position = if selected_count > 1 {
+            self.selection_bounds()
+                .map(|[x, y, _, _]| format!("{x:.1}, {y:.1}"))
+                .unwrap_or_else(|| "—".into())
+        } else {
+            selection
+                .map(|o| format!("{:.1}, {:.1}", o.x, o.y))
+                .unwrap_or_else(|| "—".into())
+        };
+        let selection_size = if selected_count > 1 {
+            self.selection_bounds()
+                .map(|[_, _, w, h]| format!("{w:.1} × {h:.1}"))
+                .unwrap_or_else(|| "—".into())
+        } else {
+            selection
+                .map(|o| format!("{:.1} × {:.1}", o.w, o.h))
+                .unwrap_or_else(|| "—".into())
+        };
+        let selection_rotation = if selected_count > 1 {
+            let mut rotations = self
+                .selected_indices()
+                .into_iter()
+                .map(|i| self.drawing.objects[i].rotation);
+            match rotations.next() {
+                Some(first) if rotations.all(|rotation| (rotation - first).abs() < 0.0001) => {
+                    format!("{:.1}°", first.to_degrees())
+                }
+                Some(_) => "Mixed".into(),
+                None => "—".into(),
+            }
+        } else {
+            selection
+                .map(|o| format!("{:.1}°", o.rotation.to_degrees()))
+                .unwrap_or_else(|| "—".into())
+        };
         v_flex()
             .flex_1()
             .min_h_0()
@@ -344,36 +408,10 @@ impl Editor {
                     "Selection",
                     v_flex()
                         .gap_2()
-                        .child(
-                            self.property_row(
-                                "Layer",
-                                self.layers[self.selected_layer].name.clone(),
-                            ),
-                        )
-                        .child(
-                            self.property_row(
-                                "Position",
-                                selection
-                                    .map(|o| format!("{:.1}, {:.1}", o.x, o.y))
-                                    .unwrap_or_else(|| "—".into()),
-                            ),
-                        )
-                        .child(
-                            self.property_row(
-                                "Size",
-                                selection
-                                    .map(|o| format!("{:.1} × {:.1}", o.w, o.h))
-                                    .unwrap_or_else(|| "—".into()),
-                            ),
-                        )
-                        .child(
-                            self.property_row(
-                                "Rotation",
-                                selection
-                                    .map(|o| format!("{:.1}°", o.rotation.to_degrees()))
-                                    .unwrap_or_else(|| "—".into()),
-                            ),
-                        )
+                        .child(self.property_row("Layer", selection_layer))
+                        .child(self.property_row("Position", selection_position))
+                        .child(self.property_row("Size", selection_size))
+                        .child(self.property_row("Rotation", selection_rotation))
                         .child(
                             self.command_button(
                                 "edit-object",
@@ -383,7 +421,7 @@ impl Editor {
                                 cx,
                             )
                             .label("Edit…")
-                            .disabled(selection.is_none()),
+                            .disabled(selection.is_none() || selected_count > 1),
                         ),
                 ),
             )
@@ -587,6 +625,9 @@ impl Editor {
                                     ("Move layer down", Command::LayerDown),
                                     ("Delete layer", Command::DeleteLayer),
                                     ("Clear keyframe", Command::ClearKeyframe),
+                                    ("Delete selected frames", Command::DeleteFrames),
+                                    ("Move selected frames left", Command::MoveFramesLeft),
+                                    ("Move selected frames right", Command::MoveFramesRight),
                                 ],
                                 cx,
                             )
