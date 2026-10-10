@@ -1,3 +1,4 @@
+mod app_icon;
 mod editor;
 mod native_menu;
 mod theme;
@@ -35,6 +36,7 @@ fn window_chrome_options() -> WindowOptions {
 
 fn main() {
     application().with_assets(assets::AllAssets).run(|cx| {
+        app_icon::init();
         init(cx);
         theme::init(cx);
         native_menu::init(cx);
