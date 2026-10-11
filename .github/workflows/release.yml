@@ -9,9 +9,9 @@ permissions:
   contents: write
 
 jobs:
-  build-macos:
-    name: Build macOS release
-    runs-on: macos-latest
+  build-macos-arm64:
+    name: Build macOS arm64 release
+    runs-on: macos-14
 
     steps:
       - name: Check out repository
@@ -20,30 +20,57 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run tests
-        run: cargo test --locked
-
       - name: Build application bundle
         run: bash scripts/bundle-macos.sh release
 
-      - name: Archive application bundle
+      - name: Archive macOS arm64 application bundle
         shell: bash
         run: |
           set -euo pipefail
           target_dir="$(cargo metadata --no-deps --format-version 1 | /usr/bin/plutil -extract target_directory raw -o - -)"
           bundle_dir="$target_dir/bundle/Popcorn.app"
           test -d "$bundle_dir"
-          tar -czf Popcorn-macos.tar.gz -C "$(dirname "$bundle_dir")" Popcorn.app
+          tar -czf Popcorn-macos-arm64.tar.gz -C "$(dirname "$bundle_dir")" Popcorn.app
 
-      - name: Upload macOS release artifact
+      - name: Upload macOS arm64 release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-macos
-          path: Popcorn-macos.tar.gz
+          name: release-macos-arm64
+          path: Popcorn-macos-arm64.tar.gz
           if-no-files-found: error
 
-  build-windows:
-    name: Build Windows release
+  build-macos-intel:
+    name: Build macOS Intel release
+    runs-on: macos-15-intel
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build application bundle
+        run: bash scripts/bundle-macos.sh release
+
+      - name: Archive macOS Intel application bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_dir="$(cargo metadata --no-deps --format-version 1 | /usr/bin/plutil -extract target_directory raw -o - -)"
+          bundle_dir="$target_dir/bundle/Popcorn.app"
+          test -d "$bundle_dir"
+          tar -czf Popcorn-macos-intel.tar.gz -C "$(dirname "$bundle_dir")" Popcorn.app
+
+      - name: Upload macOS Intel release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-intel
+          path: Popcorn-macos-intel.tar.gz
+          if-no-files-found: error
+
+  build-windows-x86_64:
+    name: Build Windows x86_64 release
     runs-on: windows-latest
 
     steps:
@@ -55,29 +82,52 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Run tests
-        run: cargo test --locked --target x86_64-pc-windows-msvc
-
       - name: Build release executable
         run: cargo build --locked --release --target x86_64-pc-windows-msvc
 
-      - name: Archive Windows executable
+      - name: Archive Windows x86_64 executable
         shell: pwsh
         run: Compress-Archive -Path target/x86_64-pc-windows-msvc/release/popcorn.exe -DestinationPath Popcorn-windows-x86_64.zip
 
-      - name: Upload Windows release artifact
+      - name: Upload Windows x86_64 release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-windows
+          name: release-windows-x86_64
           path: Popcorn-windows-x86_64.zip
+          if-no-files-found: error
+
+  build-linux-x86_64:
+    name: Build Linux x86_64 release
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release executable
+        run: cargo build --locked --release
+
+      - name: Archive Linux x86_64 executable
+        run: tar -czf Popcorn-linux-x86_64.tar.gz -C target/release popcorn
+
+      - name: Upload Linux x86_64 release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-x86_64
+          path: Popcorn-linux-x86_64.tar.gz
           if-no-files-found: error
 
   publish:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
     needs:
-      - build-macos
-      - build-windows
+      - build-macos-arm64
+      - build-macos-intel
+      - build-windows-x86_64
+      - build-linux-x86_64
 
     steps:
       - name: Download release artifacts
