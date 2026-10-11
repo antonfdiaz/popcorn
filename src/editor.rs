@@ -10,6 +10,7 @@ use gpui_kit::*;
 use crate::theme;
 mod chrome;
 mod commands;
+mod geometry;
 mod panels;
 #[cfg(test)]
 mod tests;
@@ -26,6 +27,8 @@ const LAYER_WIDTH: f32 = 184.;
 enum Tool {
     Select,
     Pencil,
+    Eraser,
+    Fill,
     Rectangle,
     Ellipse,
     Text,
@@ -34,9 +37,11 @@ enum Tool {
 }
 
 impl Tool {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 9] = [
         Self::Select,
         Self::Pencil,
+        Self::Eraser,
+        Self::Fill,
         Self::Rectangle,
         Self::Ellipse,
         Self::Text,
@@ -48,6 +53,8 @@ impl Tool {
         match self {
             Self::Select => "Selection",
             Self::Pencil => "Pencil",
+            Self::Eraser => "Eraser",
+            Self::Fill => "Fill",
             Self::Rectangle => "Rectangle",
             Self::Ellipse => "Ellipse",
             Self::Text => "Text",
@@ -60,6 +67,8 @@ impl Tool {
         match self {
             Self::Select => IconName::Move,
             Self::Pencil => IconName::Pencil,
+            Self::Eraser => IconName::Eraser,
+            Self::Fill => IconName::PaintBucket,
             Self::Rectangle => IconName::Square,
             Self::Ellipse => IconName::Circle,
             Self::Text => IconName::ALargeSmall,
@@ -135,6 +144,7 @@ pub struct Editor {
     current_frame: usize,
     is_playing: bool,
     selected_tool: Tool,
+    eraser_size: f32,
     inspector_tab: InspectorTab,
     selected_layer: usize,
     zoom: u32,
@@ -174,6 +184,7 @@ impl Default for Editor {
             current_frame: 1,
             is_playing: false,
             selected_tool: Tool::Select,
+            eraser_size: 20.,
             inspector_tab: InspectorTab::Properties,
             selected_layer: 0,
             zoom: 100,

@@ -209,8 +209,18 @@ impl Editor {
                     .selected(tool == self.selected_tool)
                     .toggled(tool == self.selected_tool)
                     .icon(Icon::new(tool.icon()).small())
-                    .tooltip(tool.label())
+                    .tooltip(match tool {
+                        Tool::Eraser => {
+                            "Eraser: erase parts of strokes and fills on the active layer"
+                        }
+                        Tool::Fill => "Fill: paint a closed region on the active layer",
+                        _ => tool.label(),
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| {
+                        this.cancel_interaction();
+                        if matches!(tool, Tool::Eraser | Tool::Fill) {
+                            this.clear_selection();
+                        }
                         this.selected_tool = tool;
                         cx.notify();
                     }))
@@ -256,6 +266,33 @@ impl Editor {
                     .text_color(theme::color(theme::ACCENT))
                     .child(self.selected_tool.label()),
             )
+            .when(self.selected_tool == Tool::Eraser, |bar| {
+                bar.child(
+                    Button::new("eraser-smaller")
+                        .ghost()
+                        .compact()
+                        .icon(IconName::Minus)
+                        .tooltip("Smaller eraser")
+                        .disabled(self.eraser_size <= 2.)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.eraser_size = (this.eraser_size - 2.).max(2.);
+                            cx.notify();
+                        })),
+                )
+                .child(div().text_xs().child(format!("{:.0} px", self.eraser_size)))
+                .child(
+                    Button::new("eraser-larger")
+                        .ghost()
+                        .compact()
+                        .icon(IconName::Plus)
+                        .tooltip("Larger eraser")
+                        .disabled(self.eraser_size >= 100.)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.eraser_size = (this.eraser_size + 2.).min(100.);
+                            cx.notify();
+                        })),
+                )
+            })
             .child(
                 self.command_button("canvas-grid", IconName::Grid2x2, "Grid", Command::Grid, cx)
                     .toggled(self.grid),

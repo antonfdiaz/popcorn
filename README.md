@@ -6,7 +6,10 @@ The goal is to provide a fast, extensible, classic timeline workflow without scr
 
 ## Current status
 
-- Canvas with selection, move, hand, zoom, rectangle, ellipse, pencil, and text tools.
+- Canvas with selection, hand, zoom, rectangle, ellipse, pencil, text, eraser, and fill tools.
+- Eraser cuts parts of vector strokes and fills on the active layer, with an adjustable circular brush (2–100 document pixels). Escape cancels the stroke; undo restores it in one step.
+- Fill paints closed vector regions on the active layer, including regions bounded by multiple strokes, while preserving their contours and nested islands. Open regions are left unchanged.
+- Eraser and Fill leave text and imported images unchanged. Edited geometry, including holes and fragments, remains vector-based and is saved in `.pop` documents.
 - Timeline with layers, frames, keyframes, blank frames, playback, and looping.
 - Shift-click selection for multiple frames and layers, with block movement, reordering, and deletion.
 - Drag selected keyframes horizontally to move them together in the timeline.

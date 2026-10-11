@@ -120,6 +120,34 @@ fn real_pointer_drag_draws_and_context_menu_keeps_frame_target(cx: &mut TestAppC
             [view.drawing.objects[0].w, view.drawing.objects[0].h],
             [140., 100.]
         );
+        window.click("tool-Eraser", cx);
+        window.click("eraser-larger", cx);
+        assert_eq!(editor.read(cx).eraser_size, 22.);
+        window.click("eraser-smaller", cx);
+        let center = b.center() - point(px(50.), px(10.));
+        window.drag(
+            center - point(px(10.), px(0.)),
+            center + point(px(10.), px(0.)),
+            cx,
+        );
+        {
+            use geo::Contains;
+            let object = &editor.read(cx).drawing.objects[0];
+            assert!(matches!(object.kind, super::workspace::Kind::Vector { .. }));
+            let geometry = object.vector_geometry().unwrap();
+            assert!(!geometry.contains(&geo::Point::new(350., 215.)));
+            assert!(geometry.contains(&geo::Point::new(320., 215.)));
+        }
+        window.click("doc-undo", cx);
+        assert!(matches!(
+            editor.read(cx).drawing.objects[0].kind,
+            super::workspace::Kind::Ellipse
+        ));
+        window.click("doc-redo", cx);
+        window.click("tool-Fill", cx);
+        let offset = center - b.origin;
+        window.click_at("drawing-viewport", offset, cx);
+        assert_eq!(editor.read(cx).drawing.objects.len(), 1);
         window.right_click("frame-0-5", cx);
         assert_eq!(editor.read(cx).current_frame, 5);
         assert_eq!(editor.read(cx).selected_layer, 0);

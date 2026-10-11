@@ -7,8 +7,23 @@ pub(super) enum Kind {
     Rectangle,
     Ellipse,
     Pencil(Vec<[f32; 2]>),
+    Vector {
+        geometry: geo::MultiPolygon<f64>,
+        stroke: bool,
+        #[serde(default)]
+        fills: Vec<FillRegion>,
+    },
     Text(String),
-    Image { bytes: Vec<u8>, format: String },
+    Image {
+        bytes: Vec<u8>,
+        format: String,
+    },
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub(super) struct FillRegion {
+    pub(super) geometry: geo::MultiPolygon<f64>,
+    pub(super) color: u32,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -34,6 +49,14 @@ pub(super) enum Corner {
 }
 
 pub(super) enum Drag {
+    Erase {
+        initial: Vec<Object>,
+        selection: Vec<usize>,
+        last: [f32; 2],
+        changed: bool,
+        history: Vec<commands::Snapshot>,
+        future: Vec<commands::Snapshot>,
+    },
     Draw(usize, [f32; 2]),
     Move {
         items: Vec<(usize, [f32; 2])>,
@@ -89,6 +112,7 @@ pub(super) struct Drawing {
     pub(super) selection: Vec<usize>,
     pub(super) drag: Option<Drag>,
     pub(super) pan: [f32; 2],
+    pub(super) pointer: Option<[f32; 2]>,
     pub(super) bounds: Rc<Cell<Bounds<Pixels>>>,
 }
 
@@ -100,6 +124,7 @@ impl Default for Drawing {
             selection: Vec::new(),
             drag: None,
             pan: [0., 0.],
+            pointer: None,
             bounds: Rc::new(Cell::new(Bounds::default())),
         }
     }
@@ -126,7 +151,7 @@ impl Editor {
         ]
     }
 
-    fn rotated_bounds(o: &Object, scale: f32) -> [f32; 4] {
+    pub(super) fn rotated_bounds(o: &Object, scale: f32) -> [f32; 4] {
         let corners = Self::object_corners(o);
         let min_x = corners.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min);
         let max_x = corners
@@ -288,6 +313,9 @@ impl Editor {
     }
 
     fn render_object(o: &Object, scale: f32, selected: bool) -> Div {
+        if matches!(o.kind, Kind::Vector { .. }) {
+            return Self::render_vector_shape(o, scale, selected);
+        }
         let bounds = Self::rotated_bounds(o, scale);
         if o.rotation.abs() > 0.0001 {
             if matches!(&o.kind, Kind::Rectangle | Kind::Ellipse | Kind::Pencil(_)) {
@@ -306,6 +334,7 @@ impl Editor {
                 d.border_2().border_color(theme::color(theme::BLUE))
             });
         match &o.kind {
+            Kind::Vector { .. } => unreachable!(),
             Kind::Rectangle => base.bg(theme::color(o.fill)),
             Kind::Ellipse => base.rounded_full().bg(theme::color(o.fill)),
             Kind::Text(text) if o.rotation.abs() > 0.0001 => {
@@ -385,12 +414,20 @@ impl Editor {
     }
 
     fn hit_test(&self, p: [f32; 2]) -> Option<usize> {
+        use geo::Contains;
         self.drawing
             .objects
             .iter()
             .enumerate()
             .filter(|(_, o)| {
                 self.object_visible(o) && !self.layers[o.layer].locked && {
+                    if matches!(o.kind, Kind::Vector { .. }) {
+                        let point = geo::Point::new(p[0] as f64, p[1] as f64);
+                        return o.vector_geometry().is_some_and(|g| g.contains(&point))
+                            || o.fill_geometries()
+                                .iter()
+                                .any(|(geometry, _)| geometry.contains(&point));
+                    }
                     let local =
                         Self::rotated_point([o.x + o.w / 2., o.y + o.h / 2.], p, -o.rotation);
                     local[0] >= o.x
@@ -638,8 +675,28 @@ impl Editor {
                             )
                             .when(self.selected_tool == Tool::Select, |stage| {
                                 stage.child(self.render_transform_overlay(scale))
+                            })
+                            .when(self.selected_tool == Tool::Eraser, |stage| {
+                                stage.children(self.drawing.pointer.map(|p| {
+                                    let size = self.eraser_size * scale;
+                                    div()
+                                        .absolute()
+                                        .left(px(p[0] * scale - size / 2.))
+                                        .top(px(p[1] * scale - size / 2.))
+                                        .w(px(size))
+                                        .h(px(size))
+                                        .rounded_full()
+                                        .border_1()
+                                        .border_color(theme::color(theme::BLUE))
+                                }))
                             }),
                     )
+                    .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
+                        if !*hovered {
+                            this.drawing.pointer = None;
+                            cx.notify();
+                        }
+                    }))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, e: &MouseDownEvent, window, cx| {
@@ -656,8 +713,10 @@ impl Editor {
                         }),
                     )
                     .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, cx| {
+                        this.drawing.pointer = Some(this.document_point(e.position));
                         if !e.dragging() {
-                            this.drawing.drag = None;
+                            this.finish_drawing();
+                            cx.notify();
                             return;
                         }
                         this.pointer_move(e.position, e.modifiers.shift);
@@ -666,7 +725,7 @@ impl Editor {
                     .on_mouse_up(
                         MouseButton::Left,
                         cx.listener(|this, _, _, cx| {
-                            this.drawing.drag = None;
+                            this.finish_drawing();
                             cx.notify();
                         }),
                     )
@@ -842,6 +901,25 @@ impl Editor {
             return;
         }
         self.clear_timeline_selection();
+        if self.selected_tool == Tool::Eraser {
+            self.text_editing = None;
+            self.drawing.drag = Some(Drag::Erase {
+                initial: self.drawing.objects.clone(),
+                selection: self.selected_indices(),
+                last: p,
+                changed: false,
+                history: self.history.clone(),
+                future: self.future.clone(),
+            });
+            self.erase_segment(p, p);
+            return;
+        }
+        if self.selected_tool == Tool::Fill {
+            self.drawing.drag = None;
+            self.text_editing = None;
+            self.fill_region(p);
+            return;
+        }
         if self.selected_tool == Tool::Select {
             let scale = self.zoom as f32 / 100.;
             let hit = self.hit_test(p);
@@ -1029,7 +1107,16 @@ impl Editor {
 
     fn pointer_move(&mut self, pos: Point<Pixels>, shift: bool) {
         let p = self.document_point(pos);
+        if let Some(Drag::Erase { last, .. }) = &self.drawing.drag {
+            let last = *last;
+            self.erase_segment(last, p);
+            if let Some(Drag::Erase { last, .. }) = &mut self.drawing.drag {
+                *last = p;
+            }
+            return;
+        }
         match &self.drawing.drag {
+            Some(Drag::Erase { .. }) => unreachable!(),
             Some(Drag::Pan(start, initial)) => {
                 self.drawing.pan = [
                     initial[0] + f32::from(pos.x) - start[0],
@@ -1171,8 +1258,16 @@ impl Editor {
                 let o = &mut self.drawing.objects[*i];
                 if let Kind::Pencil(points) = &mut o.kind {
                     points.push([p[0] - o.x, p[1] - o.y]);
-                    o.w = o.w.max(p[0] - o.x + 4.);
-                    o.h = o.h.max(p[1] - o.y + 4.);
+                    let min_x = points.iter().map(|p| p[0]).fold(0., f32::min);
+                    let min_y = points.iter().map(|p| p[1]).fold(0., f32::min);
+                    for point in points.iter_mut() {
+                        point[0] -= min_x;
+                        point[1] -= min_y;
+                    }
+                    o.x += min_x;
+                    o.y += min_y;
+                    o.w = points.iter().map(|p| p[0]).fold(1., f32::max) + 4.;
+                    o.h = points.iter().map(|p| p[1]).fold(1., f32::max) + 4.;
                 } else {
                     let dx = p[0] - start[0];
                     let dy = if shift {
@@ -1190,9 +1285,42 @@ impl Editor {
         }
     }
 
+    fn finish_drawing(&mut self) {
+        let Some(Drag::Draw(index, _)) = self.drawing.drag.take() else {
+            return;
+        };
+        let Some(object) = self.drawing.objects.get(index) else {
+            return;
+        };
+        if !matches!(object.kind, Kind::Pencil(_)) {
+            return;
+        }
+        if let Some(converted) = object
+            .vector_geometry()
+            .and_then(|g| object.with_geometry(g, true))
+        {
+            self.drawing.objects[index] = converted;
+        }
+    }
+
     pub(super) fn cancel_interaction(&mut self) {
         if let Some(drag) = self.drawing.drag.take() {
             match drag {
+                Drag::Erase {
+                    initial,
+                    selection,
+                    changed,
+                    history,
+                    future,
+                    ..
+                } => {
+                    if changed {
+                        self.drawing.objects = initial;
+                        self.set_selection(selection);
+                        self.history = history;
+                        self.future = future;
+                    }
+                }
                 Drag::Draw(index, _) => {
                     if index < self.drawing.objects.len() {
                         self.drawing.objects.remove(index);
@@ -1321,6 +1449,145 @@ mod tests {
             [object.x, object.y, object.w, object.h],
             [100., 80., 100., 100.]
         );
+    }
+
+    #[::core::prelude::v1::test]
+    fn eraser_drag_is_one_undo_step_and_can_be_cancelled() {
+        use geo::{Area, Contains};
+        let mut editor = editor();
+        for x in [100., 200.] {
+            editor.drawing.objects.push(Object {
+                kind: Kind::Rectangle,
+                x,
+                y: 100.,
+                w: 40.,
+                h: 40.,
+                layer: 0,
+                keyframe: 1,
+                fill: theme::ACCENT,
+                rotation: 0.,
+            });
+        }
+        editor.selected_tool = Tool::Eraser;
+        editor.pointer_down(point(px(120.), px(120.)), false);
+        editor.pointer_move(point(px(240.), px(120.)), false);
+        assert_eq!(editor.drawing.objects.len(), 2);
+        for object in &editor.drawing.objects {
+            let geometry = object.vector_geometry().unwrap();
+            assert!(geometry.unsigned_area() < 1600.);
+            assert!(!geometry.contains(&geo::Point::new(220., 120.)));
+        }
+        assert_eq!(editor.history.len(), 1);
+        editor.cancel_interaction();
+        assert_eq!(editor.drawing.objects.len(), 2);
+        assert!(editor.history.is_empty());
+        assert!(matches!(editor.drawing.objects[0].kind, Kind::Rectangle));
+        editor.pointer_down(point(px(120.), px(120.)), false);
+        editor.pointer_move(point(px(240.), px(120.)), false);
+        editor.drawing.drag = None;
+        editor.apply_edit(Command::Undo);
+        assert_eq!(editor.drawing.objects.len(), 2);
+        editor.apply_edit(Command::Redo);
+        assert!(
+            editor.drawing.objects[0]
+                .vector_geometry()
+                .unwrap()
+                .unsigned_area()
+                < 1600.
+        );
+    }
+
+    #[::core::prelude::v1::test]
+    fn fill_respects_shape_geometry_layer_locks_and_undo() {
+        let mut editor = editor();
+        editor.drawing.objects.push(Object {
+            kind: Kind::Ellipse,
+            x: 100.,
+            y: 100.,
+            w: 100.,
+            h: 100.,
+            layer: 0,
+            keyframe: 1,
+            fill: theme::BLUE,
+            rotation: 0.,
+        });
+        editor.selected_tool = Tool::Fill;
+        editor.pointer_down(point(px(101.), px(101.)), false);
+        assert_eq!(editor.drawing.objects[0].fill, theme::BLUE);
+        assert!(editor.history.is_empty());
+        editor.layers[0].locked = true;
+        editor.pointer_down(point(px(150.), px(150.)), false);
+        assert_eq!(editor.drawing.objects[0].fill, theme::BLUE);
+        editor.layers[0].locked = false;
+        editor.pointer_down(point(px(150.), px(150.)), false);
+        assert_eq!(editor.drawing.objects[0].fill, editor.fill);
+        assert!(editor.drawing.drag.is_none());
+        editor.apply_edit(Command::Undo);
+        assert_eq!(editor.drawing.objects[0].fill, theme::BLUE);
+        editor.selected_tool = Tool::Eraser;
+        editor.layers[0].locked = true;
+        editor.pointer_down(point(px(150.), px(150.)), false);
+        assert_eq!(editor.drawing.objects.len(), 1);
+    }
+
+    #[::core::prelude::v1::test]
+    fn pencil_loops_drawn_in_reverse_can_be_filled_after_mouse_up() {
+        use geo::Contains;
+        let mut editor = editor();
+        editor.selected_tool = Tool::Pencil;
+        editor.pointer_down(point(px(200.), px(200.)), false);
+        for p in [[100., 200.], [100., 100.], [200., 100.], [200., 200.]] {
+            editor.pointer_move(point(px(p[0]), px(p[1])), false);
+        }
+        editor.finish_drawing();
+        assert!(editor.drawing.objects[0].is_stroke());
+        assert!(editor.drawing.objects[0].valid_geometry());
+        editor.selected_tool = Tool::Fill;
+        editor.pointer_down(point(px(150.), px(150.)), false);
+        assert_eq!(editor.drawing.objects.len(), 1);
+        assert!(
+            editor.drawing.objects[0]
+                .fill_geometries()
+                .iter()
+                .any(|(geometry, _)| geometry.contains(&geo::Point::new(150., 150.)))
+        );
+        let initial_x = editor.drawing.objects[0].x;
+        editor.selected_tool = Tool::Select;
+        editor.pointer_down(point(px(150.), px(150.)), false);
+        editor.pointer_move(point(px(170.), px(150.)), false);
+        assert!(editor.drawing.objects[0].x > initial_x);
+    }
+
+    #[::core::prelude::v1::test]
+    fn cancelling_erasing_restores_the_redo_stack_and_zoom_preserves_brush_size() {
+        use geo::Contains;
+        let mut editor = editor();
+        editor.drawing.objects.push(Object {
+            kind: Kind::Rectangle,
+            x: 300.,
+            y: 100.,
+            w: 100.,
+            h: 80.,
+            layer: 0,
+            keyframe: 1,
+            fill: theme::BLUE,
+            rotation: 0.,
+        });
+        editor.checkpoint();
+        editor.drawing.objects[0].fill = theme::GREEN;
+        editor.apply_edit(Command::Undo);
+        assert_eq!(editor.future.len(), 1);
+        editor.zoom = 200;
+        editor.selected_tool = Tool::Eraser;
+        editor.pointer_down(point(px(300.), px(55.)), false);
+        let geometry = editor.drawing.objects[0].vector_geometry().unwrap();
+        assert!(!geometry.contains(&geo::Point::new(350., 140.)));
+        assert!(geometry.contains(&geo::Point::new(339., 140.)));
+        editor.cancel_interaction();
+        assert!(editor.history.is_empty());
+        assert_eq!(editor.future.len(), 1);
+        editor.apply_edit(Command::Redo);
+        assert_eq!(editor.drawing.objects[0].fill, theme::GREEN);
     }
 
     #[::core::prelude::v1::test]

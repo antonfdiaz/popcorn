@@ -327,6 +327,7 @@ impl Snapshot {
                     || !o.rotation.is_finite()
                     || o.w <= 0.
                     || o.h <= 0.
+                    || !o.valid_geometry()
             })
         {
             return Err("Invalid document dimensions, layers or frames".into());
