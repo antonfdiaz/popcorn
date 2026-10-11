@@ -636,10 +636,9 @@ impl Editor {
                                     Self::render_object(o, scale, self.is_selected(i))
                                 }),
                             )
-                            .when(
-                                matches!(self.selected_tool, Tool::Select | Tool::Transform),
-                                |stage| stage.child(self.render_transform_overlay(scale)),
-                            ),
+                            .when(self.selected_tool == Tool::Select, |stage| {
+                                stage.child(self.render_transform_overlay(scale))
+                            }),
                     )
                     .on_mouse_down(
                         MouseButton::Left,
@@ -843,7 +842,7 @@ impl Editor {
             return;
         }
         self.clear_timeline_selection();
-        if matches!(self.selected_tool, Tool::Select | Tool::Transform) {
+        if self.selected_tool == Tool::Select {
             let scale = self.zoom as f32 / 100.;
             let hit = self.hit_test(p);
             if click_count == 2 {
@@ -1428,7 +1427,7 @@ mod tests {
                 rotation: 0.,
             },
         ]);
-        editor.selected_tool = Tool::Transform;
+        editor.selected_tool = Tool::Select;
         editor.set_selection([0, 1]);
         editor.pointer_down_with_modifiers(point(px(240.), px(140.)), false, false, 1);
         editor.pointer_move(point(px(380.), px(220.)), false);
@@ -1519,7 +1518,7 @@ mod tests {
             fill: theme::ACCENT,
             rotation: 0.,
         });
-        editor.selected_tool = Tool::Transform;
+        editor.selected_tool = Tool::Select;
         editor.pointer_down(point(px(350.), px(140.)), false);
         editor.drawing.drag = None;
         editor.pointer_down(point(px(350.), px(72.)), false);

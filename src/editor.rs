@@ -25,7 +25,6 @@ const LAYER_WIDTH: f32 = 184.;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tool {
     Select,
-    Transform,
     Pencil,
     Rectangle,
     Ellipse,
@@ -35,9 +34,8 @@ enum Tool {
 }
 
 impl Tool {
-    const ALL: [Self; 8] = [
+    const ALL: [Self; 7] = [
         Self::Select,
-        Self::Transform,
         Self::Pencil,
         Self::Rectangle,
         Self::Ellipse,
@@ -49,7 +47,6 @@ impl Tool {
     fn label(self) -> &'static str {
         match self {
             Self::Select => "Selection",
-            Self::Transform => "Transform",
             Self::Pencil => "Pencil",
             Self::Rectangle => "Rectangle",
             Self::Ellipse => "Ellipse",
@@ -62,7 +59,6 @@ impl Tool {
     fn icon(self) -> IconName {
         match self {
             Self::Select => IconName::Move,
-            Self::Transform => IconName::Frame,
             Self::Pencil => IconName::Pencil,
             Self::Rectangle => IconName::Square,
             Self::Ellipse => IconName::Circle,
