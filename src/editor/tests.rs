@@ -81,6 +81,19 @@ fn visible_buttons_edit_document_and_native_shortcuts_work(cx: &mut TestAppConte
         assert!(editor.read(cx).is_playing);
         window.press("enter", cx);
         assert!(!editor.read(cx).is_playing);
+        window.press("r", cx);
+        assert!(matches!(
+            editor.read(cx).selected_tool,
+            super::Tool::Rectangle
+        ));
+        window.press("k", cx);
+        assert!(matches!(editor.read(cx).selected_tool, super::Tool::Fill));
+        window.press("v", cx);
+        assert!(matches!(editor.read(cx).selected_tool, super::Tool::Select));
+        window.press("end", cx);
+        assert_eq!(editor.read(cx).current_frame, editor.read(cx).frame_count);
+        window.press("home", cx);
+        assert_eq!(editor.read(cx).current_frame, 1);
     })
     .unwrap();
     cx.run_until_parked();

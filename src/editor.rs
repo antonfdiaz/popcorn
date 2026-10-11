@@ -258,6 +258,63 @@ impl Render for Editor {
                     cx.notify();
                 }),
             )
+            .on_action(
+                cx.listener(|this, _: &crate::native_menu::JumpFirstFrame, _, cx| {
+                    this.select_frame(this.selected_layer, 1);
+                    cx.notify();
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::native_menu::JumpLastFrame, _, cx| {
+                    this.select_frame(this.selected_layer, this.frame_count);
+                    cx.notify();
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::native_menu::SelectTool, _, cx| {
+                    this.select_tool(Tool::Select, cx);
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::native_menu::PencilTool, _, cx| {
+                    this.select_tool(Tool::Pencil, cx);
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::native_menu::EraserTool, _, cx| {
+                    this.select_tool(Tool::Eraser, cx);
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::native_menu::FillTool, _, cx| {
+                    this.select_tool(Tool::Fill, cx);
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::native_menu::RectangleTool, _, cx| {
+                    this.select_tool(Tool::Rectangle, cx);
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::native_menu::EllipseTool, _, cx| {
+                    this.select_tool(Tool::Ellipse, cx);
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::native_menu::TextTool, _, cx| {
+                    this.select_tool(Tool::Text, cx);
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::native_menu::HandTool, _, cx| {
+                    this.select_tool(Tool::Hand, cx);
+                }),
+            )
+            .on_action(
+                cx.listener(|this, _: &crate::native_menu::ZoomTool, _, cx| {
+                    this.select_tool(Tool::Zoom, cx);
+                }),
+            )
             .on_action(|_: &crate::native_menu::CloseWindow, window, _| window.remove_window())
             .on_action(|_: &crate::native_menu::MinimizeWindow, window, _| window.minimize_window())
             .on_action(|_: &crate::native_menu::ZoomWindow, window, _| window.zoom_window());
@@ -278,6 +335,15 @@ impl Render for Editor {
 }
 
 impl Editor {
+    fn select_tool(&mut self, tool: Tool, cx: &mut Context<Self>) {
+        self.cancel_interaction();
+        if matches!(tool, Tool::Eraser | Tool::Fill) {
+            self.clear_selection();
+        }
+        self.selected_tool = tool;
+        cx.notify();
+    }
+
     fn ensure_color_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.color_picker.is_some() {
             return;

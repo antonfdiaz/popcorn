@@ -213,19 +213,18 @@ impl Editor {
                     .toggled(tool == self.selected_tool)
                     .icon(Icon::new(tool.icon()).small())
                     .tooltip(match tool {
-                        Tool::Eraser => {
-                            "Eraser: erase parts of strokes and fills on the active layer"
-                        }
-                        Tool::Fill => "Fill: paint a closed region on the active layer",
-                        _ => tool.label(),
+                        Tool::Select => "Selection (V)",
+                        Tool::Pencil => "Pencil (Y)",
+                        Tool::Eraser => "Eraser (E)",
+                        Tool::Fill => "Fill (K)",
+                        Tool::Rectangle => "Rectangle (R)",
+                        Tool::Ellipse => "Ellipse (O)",
+                        Tool::Text => "Text (T)",
+                        Tool::Hand => "Hand (H)",
+                        Tool::Zoom => "Zoom (Z)",
                     })
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        this.cancel_interaction();
-                        if matches!(tool, Tool::Eraser | Tool::Fill) {
-                            this.clear_selection();
-                        }
-                        this.selected_tool = tool;
-                        cx.notify();
+                        this.select_tool(tool, cx);
                     }))
             }))
             .child(div().flex_1())

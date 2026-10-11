@@ -40,6 +40,17 @@ actions!(
         TogglePlayback,
         PreviousFrame,
         NextFrame,
+        JumpFirstFrame,
+        JumpLastFrame,
+        SelectTool,
+        PencilTool,
+        EraserTool,
+        FillTool,
+        RectangleTool,
+        EllipseTool,
+        TextTool,
+        HandTool,
+        ZoomTool,
         About
     ]
 );
@@ -74,6 +85,7 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("f7", BlankKeyframe, Some("Editor")),
         KeyBinding::new("shift-f6", ClearKeyframe, Some("Editor")),
         KeyBinding::new("f5", ExtendTimeline, Some("Editor")),
+        KeyBinding::new("shift-f5", DeleteSelectedFrames, Some("Editor")),
         KeyBinding::new(&shortcut("g"), ToggleGrid, Some("Editor")),
         KeyBinding::new(&shortcut("0"), FitStage, Some("Editor")),
         KeyBinding::new(&shortcut("="), ZoomIn, Some("Editor")),
@@ -88,6 +100,19 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("enter", TogglePlayback, Some("Editor")),
         KeyBinding::new("left", PreviousFrame, Some("Editor")),
         KeyBinding::new("right", NextFrame, Some("Editor")),
+        KeyBinding::new("home", JumpFirstFrame, Some("Editor")),
+        KeyBinding::new("end", JumpLastFrame, Some("Editor")),
+        // Animate-style tool shortcuts. Only tools that exist in Popcorn are
+        // included here; unsupported Animate tools are intentionally omitted.
+        KeyBinding::new("v", SelectTool, Some("Editor")),
+        KeyBinding::new("y", PencilTool, Some("Editor")),
+        KeyBinding::new("e", EraserTool, Some("Editor")),
+        KeyBinding::new("k", FillTool, Some("Editor")),
+        KeyBinding::new("r", RectangleTool, Some("Editor")),
+        KeyBinding::new("o", EllipseTool, Some("Editor")),
+        KeyBinding::new("t", TextTool, Some("Editor")),
+        KeyBinding::new("h", HandTool, Some("Editor")),
+        KeyBinding::new("z", ZoomTool, Some("Editor")),
     ]);
     #[cfg(not(target_os = "macos"))]
     cx.bind_keys([KeyBinding::new("ctrl-y", Redo, Some("Editor"))]);

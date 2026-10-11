@@ -42,6 +42,10 @@ cargo test
 - `F5`: extend the timeline.
 - `F6`: insert a keyframe.
 - `F7`: insert a blank frame.
+- `Shift` + `F5`: delete selected timeline frames.
+- `Home` / `End`: jump to the first or last frame.
+- `V` / `Y` / `K` / `E`: selection, pencil, fill, and eraser tools.
+- `R` / `O` / `T` / `H` / `Z`: rectangle, ellipse, text, hand, and zoom tools.
 - `Shift`: constrain shapes and transformations.
 - `Shift` + click: select a range of timeline frames or layers.
 - `Delete` on selected timeline frames: remove their keyframes and contents.
