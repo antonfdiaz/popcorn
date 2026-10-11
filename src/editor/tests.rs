@@ -72,6 +72,11 @@ fn visible_buttons_edit_document_and_native_shortcuts_work(cx: &mut TestAppConte
         assert!(editor.read(cx).modal.is_some());
         window.click("modal-cancel", cx);
         assert!(editor.read(cx).modal.is_none());
+        editor.update(cx, |view, cx| view.command(Command::About, window, cx));
+        window.render_frame(cx);
+        assert!(window.find("about-close").bounds().size.width > px(40.));
+        window.click("about-close", cx);
+        assert!(editor.read(cx).modal.is_none());
         window.press("enter", cx);
         assert!(editor.read(cx).is_playing);
         window.press("enter", cx);

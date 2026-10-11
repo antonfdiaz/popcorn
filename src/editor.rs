@@ -266,7 +266,7 @@ impl Render for Editor {
             Undo=>Undo,Redo=>Redo,Copy=>Copy,Cut=>Cut,Paste=>Paste,Duplicate=>Duplicate,DeleteSelection=>Delete,
             AddLayer=>AddLayer,DeleteLayer=>DeleteLayer,InsertKeyframe=>Keyframe,BlankKeyframe=>BlankKeyframe,ClearKeyframe=>ClearKeyframe,DeleteSelectedFrames=>DeleteFrames,MoveSelectedFramesLeft=>MoveFramesLeft,MoveSelectedFramesRight=>MoveFramesRight,ExtendTimeline=>Extend,
             ToggleGrid=>Grid,FitStage=>Fit,ZoomIn=>ZoomIn,ZoomOut=>ZoomOut,ToggleOnion=>Onion,ToggleLoop=>Loop,
-            ShowProperties=>Properties,ShowLibrary=>Library,ShowAlign=>Align,Help=>Help
+            ShowProperties=>Properties,ShowLibrary=>Library,ShowAlign=>Align,Help=>Help,About=>About
         )
         .flex().flex_col().size_full().overflow_hidden().bg(theme::color(theme::APP_BG)).text_color(theme::color(theme::TEXT))
         .when(!cfg!(target_os="macos"),|d|d.child(self.render_menu_bar(cx)))

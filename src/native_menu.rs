@@ -39,7 +39,8 @@ actions!(
         Help,
         TogglePlayback,
         PreviousFrame,
-        NextFrame
+        NextFrame,
+        About
     ]
 );
 
@@ -92,7 +93,11 @@ pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("ctrl-y", Redo, Some("Editor"))]);
     #[cfg(target_os = "macos")]
     cx.set_menus([
-        Menu::new("Popcorn").items([MenuItem::action("Quit Popcorn", Quit)]),
+        Menu::new("Popcorn").items([
+            MenuItem::action("About Popcorn", About),
+            MenuItem::separator(),
+            MenuItem::action("Quit Popcorn", Quit),
+        ]),
         Menu::new("File").items([
             MenuItem::action("New", NewDocument),
             MenuItem::action("Open…", OpenDocument),

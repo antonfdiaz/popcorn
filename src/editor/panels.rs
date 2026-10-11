@@ -7,6 +7,7 @@ enum Form {
     Rename,
     New,
     Help,
+    About,
 }
 pub(super) struct Modal {
     form: Form,
@@ -88,10 +89,31 @@ impl Modal {
             error: String::new(),
         }
     }
+
+    pub(super) fn about() -> Self {
+        Self {
+            form: Form::About,
+            title: "About Popcorn",
+            fields: vec![],
+            error: String::new(),
+        }
+    }
 }
 impl Editor {
     pub(super) fn render_modal(&self, cx: &mut Context<Self>) -> AnyElement {
         let modal = self.modal.as_ref().unwrap();
+        if matches!(modal.form, Form::About) {
+            return div()
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(rgba(0x00000099))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(self.render_about_card(cx))
+                .into_any_element();
+        }
         div().absolute().inset_0().flex().items_center().justify_center().bg(rgba(0x00000099))
             .on_mouse_down(MouseButton::Left,|_,_,cx|cx.stop_propagation())
             .child(v_flex().w(px(400.)).p_5().gap_3().rounded_lg().shadow_lg().bg(theme::color(theme::SURFACE_ALT)).border_1().border_color(theme::color(theme::BORDER))
@@ -105,6 +127,158 @@ impl Editor {
                     .child(Button::new("modal-cancel").ghost().label("Close").on_click(cx.listener(|this,_,window,cx|{this.modal=None;if let Some(f)=&this.focus {window.focus(f,cx);}cx.notify();})))
                     .when(!matches!(modal.form,Form::Help),|d|d.child(Button::new("modal-apply").primary().label("Apply").on_click(cx.listener(|this,_,window,cx|this.apply_modal(window,cx)))))))
             .into_any_element()
+    }
+
+    fn render_about_card(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let about_icon = ImageSource::Image(std::sync::Arc::new(Image::from_bytes(
+            ImageFormat::Png,
+            include_bytes!("../../popcorn.png").to_vec(),
+        )));
+        let hero_texture = ImageSource::Image(std::sync::Arc::new(Image::from_bytes(
+            ImageFormat::Png,
+            include_bytes!("../../popcorn-texture.png").to_vec(),
+        )));
+        v_flex()
+            .id("about-dialog")
+            .w(px(500.))
+            .overflow_hidden()
+            .rounded_lg()
+            .shadow_lg()
+            .bg(theme::color(theme::SURFACE_ALT))
+            .border_1()
+            .border_color(theme::color(theme::BORDER))
+            .child(
+                v_flex()
+                    .relative()
+                    .h(px(174.))
+                    .items_center()
+                    .justify_center()
+                    .gap_2()
+                    .overflow_hidden()
+                    .bg(theme::color(theme::APP_BG))
+                    .child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .opacity(0.38)
+                            .child(img(hero_texture).size_full().object_fit(ObjectFit::Cover)),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .bg(theme::color(0x9d1d27).opacity(0.6)),
+                    )
+                    .child(
+                        div()
+                            .relative()
+                            .w(px(72.))
+                            .h(px(72.))
+                            .rounded_lg()
+                            .overflow_hidden()
+                            .child(img(about_icon).size_full()),
+                    )
+                    .child(
+                        div()
+                            .relative()
+                            .font_weight(FontWeight::BOLD)
+                            .text_lg()
+                            .child("Popcorn"),
+                    )
+                    .child(
+                        div()
+                            .relative()
+                            .text_xs()
+                            .text_color(theme::color(theme::TEXT_MUTED))
+                            .child("A tiny animation studio for big ideas"),
+                    ),
+            )
+            .child(
+                v_flex()
+                    .p_5()
+                    .gap_4()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                v_flex()
+                                    .gap_1()
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .font_weight(FontWeight::BOLD)
+                                            .child("Make motion feel simple."),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(theme::color(theme::TEXT_MUTED))
+                                            .child("Draw · animate · share"),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_sm()
+                                    .bg(theme::color(theme::ACCENT_SOFT))
+                                    .text_xs()
+                                    .text_color(theme::color(theme::ACCENT))
+                                    .child(format!("v{}", env!("CARGO_PKG_VERSION"))),
+                            ),
+                    )
+                    .child(
+                        h_flex().gap_2().children(
+                            [
+                                ("VECTOR", "Clean, editable shapes"),
+                                ("TIMELINE", "Frame-by-frame control"),
+                                ("POP", "Your ideas, in motion"),
+                            ]
+                            .into_iter()
+                            .map(|(label, value)| {
+                                v_flex()
+                                    .flex_1()
+                                    .gap_1()
+                                    .p_2()
+                                    .rounded_md()
+                                    .bg(theme::color(theme::SURFACE))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(theme::color(theme::ACCENT))
+                                            .child(label),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(theme::color(theme::TEXT_MUTED))
+                                            .child(value),
+                                    )
+                            }),
+                        ),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(theme::color(theme::TEXT_DIM))
+                            .child("Built with Rust + GPUI Kit · Made for curious people."),
+                    )
+                    .child(
+                        h_flex().justify_end().child(
+                            Button::new("about-close").primary().label("Done").on_click(
+                                cx.listener(|this, _, window, cx| {
+                                    this.modal = None;
+                                    if let Some(f) = &this.focus {
+                                        window.focus(f, cx);
+                                    }
+                                    cx.notify();
+                                }),
+                            ),
+                        ),
+                    ),
+            )
     }
     fn apply_modal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(modal) = self.modal.take() else {
@@ -188,6 +362,7 @@ impl Editor {
                     self.playback_task = None;
                 }
                 Form::Help => {}
+                Form::About => {}
             }
             Ok(())
         })();

@@ -64,7 +64,10 @@ impl Editor {
                     ("Align", Command::Align),
                 ],
             ),
-            ("Help", vec![("Help", Command::Help)]),
+            (
+                "Help",
+                vec![("Help", Command::Help), ("About Popcorn", Command::About)],
+            ),
         ];
         h_flex()
             .h_8()

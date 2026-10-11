@@ -40,6 +40,7 @@ pub(super) enum Command {
     DocumentSettings,
     ObjectSettings,
     Help,
+    About,
     Left,
     Right,
     Top,
@@ -846,6 +847,7 @@ impl Editor {
                 }
             }
             Command::Help => self.modal = Some(panels::Modal::help()),
+            Command::About => self.modal = Some(panels::Modal::about()),
             _ => self.apply_edit(command),
         }
         if let Some((bytes, format)) = system_image {
@@ -1141,6 +1143,7 @@ impl Editor {
             Command::Align => self.inspector_tab = InspectorTab::Align,
 
             Command::Help => self.modal = Some(panels::Modal::help()),
+            Command::About => self.modal = Some(panels::Modal::about()),
             Command::SaveSymbol => {
                 if let Some(i) = self.editable_selection() {
                     self.checkpoint();
