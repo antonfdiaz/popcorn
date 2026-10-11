@@ -15,7 +15,7 @@ esac
 
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$project_dir"
-cargo build --profile "$cargo_profile"
+cargo build --locked --profile "$cargo_profile"
 
 # Ask Cargo for the output directory, including any configured target-dir.
 target_dir="$(cargo metadata --no-deps --format-version 1 | /usr/bin/plutil -extract target_directory raw -o - -)"

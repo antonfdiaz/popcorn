@@ -1,0 +1,45 @@
+name: macOS build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    name: Build Popcorn for macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Build application bundle
+        run: bash scripts/bundle-macos.sh release
+
+      - name: Archive application bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_dir="$(cargo metadata --no-deps --format-version 1 | /usr/bin/plutil -extract target_directory raw -o - -)"
+          bundle_dir="$target_dir/bundle/Popcorn.app"
+          test -d "$bundle_dir"
+          tar -czf Popcorn-macos.tar.gz -C "$(dirname "$bundle_dir")" Popcorn.app
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: popcorn-macos
+          path: Popcorn-macos.tar.gz
+          if-no-files-found: error
