@@ -2,6 +2,8 @@
 
 Popcorn is a cross-platform 2D animation editor built with Rust and GPUI Kit. It brings a classic timeline workflow to vector animation, with drawing tools, layers, keyframes, and `.pop` project files.
 
+**Note**: This project was highly AI assisted, but there were some human edits too. If you don't like that, I completely understand it.
+
 ## Features
 
 - Draw with selection, pencil, shape, text, fill, and eraser tools.
