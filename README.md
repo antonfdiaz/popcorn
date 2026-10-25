@@ -1,57 +1,40 @@
 # Popcorn
 
-Popcorn is a cross-platform 2D animation editor inspired by Adobe Flash/Animate, built with Rust and GPUI Kit.
+Popcorn is a cross-platform 2D animation editor built with Rust and GPUI Kit. It brings a classic timeline workflow to vector animation, with drawing tools, layers, keyframes, and `.pop` project files.
 
-The goal is to provide a fast, extensible, classic timeline workflow without scripting or advanced publishing features for now.
+## Features
 
-## Current status
+- Draw with selection, pencil, shape, text, fill, and eraser tools.
+- Animate with layers, frames, keyframes, playback, and looping.
+- Select and transform objects or groups; move and edit timeline ranges.
+- Import images, edit text, and undo or redo changes.
+- Adjust fills and object properties in the inspector.
 
-- Canvas with selection, hand, zoom, rectangle, ellipse, pencil, text, eraser, and fill tools.
-- Eraser cuts parts of vector strokes and fills on the active layer, with an adjustable circular brush (2–100 document pixels). Escape cancels the stroke; undo restores it in one step.
-- Fill paints closed vector regions on the active layer, including regions bounded by multiple strokes, while preserving their contours and nested islands. Open regions are left unchanged.
-- Eraser and Fill leave text and imported images unchanged. Edited geometry, including holes and fragments, remains vector-based and is saved in `.pop` documents.
-- Timeline with layers, frames, keyframes, blank frames, playback, and looping.
-- Shift-click selection for multiple frames and layers, with block movement, reordering, and deletion.
-- Drag selected keyframes horizontally to move them together in the timeline.
-- Selection controls for scaling and rotating objects.
-- Multiple selection with group move, scale, and rotation controls.
-- Image import through drag and drop, as well as copy and paste.
-- Double-click text to edit it and `Escape` to cancel the current operation.
-- Inspector with properties, object library, and alignment tools.
-- Fill colors with quick swatches and a custom color picker.
-- Context menus, undo/redo, and `.pop` documents.
-- Dark interface with native macOS integration.
+## Run
 
-## Running
+Install [Rust](https://www.rust-lang.org/tools/install), then run:
 
-You need Rust and Cargo installed:
-
-```bash
+```sh
 cargo run
 ```
 
-To check the project:
+Run the test suite with `cargo test`.
 
-```bash
-cargo test
-```
+## Shortcuts
 
-## Main shortcuts
+| Shortcut | Action |
+| --- | --- |
+| `Enter` | Play or pause |
+| `F5` / `F6` / `F7` | Extend timeline / insert keyframe / insert blank frame |
+| `Shift` + `F5` | Delete selected timeline frames |
+| `Home` / `End` | Go to first / last frame |
+| `V` / `Y` / `K` / `E` | Select / pencil / fill / eraser |
+| `R` / `O` / `T` / `H` / `Z` | Rectangle / ellipse / text / hand / zoom |
+| `Shift` + click | Select a range of frames or layers |
+| `Delete` | Remove selected timeline contents |
+| `Cmd/Ctrl` + `Z` | Undo |
+| `Cmd/Ctrl` + `Shift` + `Z` | Redo |
 
-- `Enter`: play or pause the animation.
-- `F5`: extend the timeline.
-- `F6`: insert a keyframe.
-- `F7`: insert a blank frame.
-- `Shift` + `F5`: delete selected timeline frames.
-- `Home` / `End`: jump to the first or last frame.
-- `V` / `Y` / `K` / `E`: selection, pencil, fill, and eraser tools.
-- `R` / `O` / `T` / `H` / `Z`: rectangle, ellipse, text, hand, and zoom tools.
-- `Shift`: constrain shapes and transformations.
-- `Shift` + click: select a range of timeline frames or layers.
-- `Delete` on selected timeline frames: remove their keyframes and contents.
-- `Cmd/Ctrl + Z`: undo.
-- `Cmd/Ctrl + Shift + Z`: redo.
+## Project layout
 
-## Structure
-
-The logic is split by responsibility inside `src/editor/`: canvas and tools, timeline, commands, panels, and UI. The document format and animation models are designed to support more tools and publishing capabilities over time.
+Editor code is organized by responsibility under `src/editor/`, including the canvas, timeline, commands, panels, and UI.
